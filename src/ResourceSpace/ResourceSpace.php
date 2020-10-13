@@ -2,25 +2,20 @@
 
 namespace App\ResourceSpace;
 
-use App\Utils\StringUtil;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ResourceSpace
 {
-    private $params;
-
     private $apiUrl;
     private $apiUsername;
     private $apiKey;
 
     public function __construct(ParameterBagInterface $params)
     {
-        $this->params = $params;
-
-        $this->apiUrl = $this->params->get('resourcespace_api_url');
-        $this->apiUsername = $this->params->get('resourcespace_api_username');
-        $this->apiKey = $this->params->get('resourcespace_api_key');
+        $resourceSpaceApi = $params->get('resourcespace_api');
+        $this->apiUrl = $resourceSpaceApi['url'];
+        $this->apiUsername = $resourceSpaceApi['username'];
+        $this->apiKey = $resourceSpaceApi['key'];
     }
 
     public function getAllResources($key, $value)
@@ -64,7 +59,7 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
-    public function getResourcePath($id)
+    public function getResourceUrl($id)
     {
         $data = $this->doApiCall('get_resource_path&param1=' . $id . '&param2=0');
         return json_decode($data, true);

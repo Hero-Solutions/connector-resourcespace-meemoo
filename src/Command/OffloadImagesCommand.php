@@ -2,6 +2,7 @@
 namespace App\Command;
 
 use App\ResourceSpace\ResourceSpace;
+use App\Util\FtpUtil;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -15,6 +16,7 @@ class OffloadImagesCommand extends Command
     private $offloadStatus;
 
     private $resourceSpace;
+    private $ftpUtil;
 
     private $resourceSpaceData;
     private $datahubUrl;
@@ -43,6 +45,7 @@ class OffloadImagesCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $this->resourceSpace = new ResourceSpace($this->params);
+        $this->ftpUtil = new FtpUtil($this->params);
 
         $lastOffloadTimestamp = 0;
         $lastTimestampFilename = $this->params->get('last_offload_timestamp_filename');
@@ -76,8 +79,12 @@ class OffloadImagesCommand extends Command
                             $fileModifiedTimestamp = strtotime($fileModifiedDate);
                         }
                         if($fileModifiedTimestamp > $lastOffloadTimestamp) {
-                            echo 'Offload resource file ' . $resourceId . ' (modified ' . $fileModifiedDate . ')' . PHP_EOL;
-                            echo $this->resourceSpace->getResourcePath($resourceId) . PHP_EOL;
+                            $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId);
+                            $this->ftpUtil->copyFile($resourceUrl);
+
+                            //TODO generate MD5
+
+                            echo 'Offloaded resource file ' . $resourceId . ' (modified ' . $fileModifiedDate . ')' . PHP_EOL;
                         } else {
                             echo 'NO offload resource file ' . $resourceId . ' (modified ' . $fileModifiedDate . ')' . PHP_EOL;
                         }
@@ -97,6 +104,8 @@ class OffloadImagesCommand extends Command
                             foreach($resourceData as $field) {
                                 $data[$field['name']] = $field['value'];
                             }
+
+                            //TODO generate metadata XML
                         } else {
                             echo 'NO offload resource metadata ' . $resourceId . ' (modified ' . $metadataModifiedDate . ')' . PHP_EOL;
                         }
