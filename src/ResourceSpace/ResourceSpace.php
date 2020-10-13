@@ -14,8 +14,6 @@ class ResourceSpace
     private $apiUsername;
     private $apiKey;
 
-    private $collectionShorthandKey;
-
     public function __construct(ParameterBagInterface $params)
     {
         $this->params = $params;
@@ -23,13 +21,11 @@ class ResourceSpace
         $this->apiUrl = $this->params->get('resourcespace_api_url');
         $this->apiUsername = $this->params->get('resourcespace_api_username');
         $this->apiKey = $this->params->get('resourcespace_api_key');
-
-        $this->collectionShorthandKey = $this->params->get('collection_shorthand_key');
     }
 
-    public function getAllResources($collection)
+    public function getAllResources($key, $value)
     {
-        $allResources = $this->doApiCall('do_search&param1=' . $this->collectionShorthandKey . ':' . $collection);
+        $allResources = $this->doApiCall('do_search&param1=' . $key . ':' . $value);
 
         if ($allResources == 'Invalid signature') {
             echo 'Error: invalid ResourceSpace API key. Please paste the key found in the ResourceSpace user management into config/connector.yml.' . PHP_EOL;
@@ -41,19 +37,25 @@ class ResourceSpace
         return $resources;
     }
 
-    public function getResourceSpaceField($ref, $fieldName)
+    public function getResourceDataIfFieldContains($ref, $fieldName, $filter)
     {
-        $currentData = $this->getResourceInfo($ref);
-        if($currentData != null) {
-            if(!empty($currentData)) {
-                foreach($currentData as $field) {
+        $resourceData = $this->getResourceInfo($ref);
+        $isValid = false;
+        if($resourceData != null) {
+            if(!empty($resourceData)) {
+                foreach($resourceData as $field) {
                     if($field['name'] == $fieldName) {
-                        return $field['value'];
+                        if(in_array($field['value'], $filter)) {
+                            $isValid = true;
+                        } else {
+                            $isValid = false;
+                            break;
+                        }
                     }
                 }
             }
         }
-        return null;
+        return $isValid ? $resourceData : null;
     }
 
     private function getResourceInfo($id)
