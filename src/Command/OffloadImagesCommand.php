@@ -21,17 +21,6 @@ class OffloadImagesCommand extends Command
     private $resourceSpace;
     private $ftpUtil;
 
-    private $resourceSpaceData;
-    private $datahubUrl;
-    private $datahubLanguage;
-    private $namespace;
-    private $metadataPrefix;
-    private $dataDefinition;
-    private $datahubEndpoint;
-    private $exifFields;
-    private $verbose;
-    private $logger;
-
     public function __construct(ParameterBagInterface $params)
     {
         $this->params = $params;
@@ -119,7 +108,7 @@ class OffloadImagesCommand extends Command
                                 $this->template = $twig->load($templateFile);
                             }
                             $xmlData = $this->template->render(array(
-                                'resourcespace' => $data,
+                                'resource' => $data,
                                 'resource_id' => $resourceId,
                                 'collection' => $collection,
                                 'md5_hash' => $md5

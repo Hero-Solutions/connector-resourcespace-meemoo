@@ -3,13 +3,13 @@
   <CP>{{ collection }}</CP>
     <CP_id></CP_id>
     <Original_CP></Original_CP>
-    <dc_source>{{ resourcespace.originalfilename }}</dc_source>
+    <dc_source>{{ resource.originalfilename }}</dc_source>
     <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
     <dc_identifier_localids type="list">
-      <Bestandsnaam>{{ resourcespace.originalfilename }}</Bestandsnaam>
+      <Bestandsnaam>{{ resource.originalfilename }}</Bestandsnaam>
     </dc_identifier_localids>
     <md5>{{ md5_hash }}</md5>
-    <dc_title>{{ resourcespace.title }}</dc_title>
+    <dc_title>{{ resource.title }}</dc_title>
     <dc_titles type="list">
       <archief></archief>
       <deelarchief></deelarchief>
@@ -35,7 +35,7 @@
       <Geluidsman></Geluidsman>
     </dc_contributors>
     <dc_publishers type="list">
-     <Publisher>{{ resourcespace.publisher }}</Publisher>
+     <Publisher>{{ resource.publisher }}</Publisher>
      <Distributeur></Distributeur>
      <Persagentschap></Persagentschap>
     </dc_publishers>
