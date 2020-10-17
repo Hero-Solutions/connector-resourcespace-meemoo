@@ -1,0 +1,35 @@
+---
+parameters:
+
+  last_offload_timestamp_file: 'last_offload_timestamp.txt'
+  template_folder: 'config'
+  template_file: 'meemoo_metadata_template.xml'
+
+  resourcespace_api:
+    url: ''
+    username: ''
+    key: ''
+
+  # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
+  # remote_directory MUST have a trailing slash
+  ftp_server:
+    use_ssl: true
+    url: ''
+    port: 22
+    username: ''
+    password: ''
+    remote_directory: ''
+
+  collections:
+    key: 'publisher'
+    values:
+      - 'DEMUSEUMSTICHTING'
+#      - 'MOMU'
+#      - 'FOMU'
+#      - 'DIVA'
+
+  offload_status:
+    key: 'offloadstatus'
+    offload_value: 'Ready for offload'
+    offload_but_keep_original_value: 'Offload but keep original'
+    offloaded_value: 'Offloaded'
