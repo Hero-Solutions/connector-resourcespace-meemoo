@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VIAA>
+  <CP>{{ collection }}</CP>
+	<CP_id></CP_id>
+	<Original_CP></Original_CP>
+    <dc_source>{{ resourcespace.originalfilename }}</dc_source>
+    <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
+    <dc_identifier_localids type="list">
+      <Bestandsnaam>{{ resourcespace.originalfilename }}</Bestandsnaam>
+    </dc_identifier_localids>
+    <md5>{{ md5_hash }}</md5>
+    <dc_title>{{ resourcespace.title }}</dc_title>
+    <dc_titles type="list">
+      <archief></archief>
+      <deelarchief></deelarchief>
+      <reeks></reeks>
+      <deelreeks></deelreeks>
+      <serie></serie>
+      <serienummer></serienummer>
+      <seizoen></seizoen>
+      <seizoennummer></seizoennummer>
+      <programma></programma>
+      <alternatief></alternatief>
+    </dc_titles>
+    <dcterms_issued></dcterms_issued>
+    <dcterms_created></dcterms_created>
+    <ebu_objectType></ebu_objectType>
+    <dc_creators type="list">
+     <Maker></Maker>
+     <Archiefvormer></Archiefvormer>
+     <Performer></Performer>
+    </dc_creators>
+    <dc_contributors type="list">
+      <Bijdrager></Bijdrager>
+      <Geluidsman></Geluidsman>
+    </dc_contributors>
+    <dc_publishers type="list">
+     <Publisher>{{ resourcespace.publisher }}</Publisher>
+     <Distributeur></Distributeur>
+     <Persagentschap></Persagentschap>
+    </dc_publishers>
+    <dc_description></dc_description>
+    <dc_description_lang></dc_description_lang>
+    <dc_description_programme></dc_description_programme>
+    <dc_description_cast></dc_description_cast>
+    <dc_description_ondertitels></dc_description_ondertitels>
+    <dc_description_transcriptie></dc_description_transcriptie>
+    <dc_description_categorie></dc_description_categorie>
+    <dc_types type="list">
+      <multiselect></multiselect>
+    </dc_types>
+    <dc_coverages type="list">
+      <ruimte></ruimte>
+      <tijd></tijd>
+    </dc_coverages>
+    <dc_subjects type="list">
+     <Trefwoord></Trefwoord>
+     <Trefwoord></Trefwoord>
+    </dc_subjects>
+    <dc_languages type="list">
+      {% for language in languages %}
+      <multiselect>{{ language }}</multiselect>
+      {% endfor %}
+    </dc_languages>
+    <dc_rights_licenses type="list">
+      {% for right in rights %}
+      <multiselect>{{ right }}</multiselect>
+      {% endfor %}
+    {% for content in contents %}
+    <multiselect>{{ content }}</multiselect>
+    {% endfor %}
+    </dc_rights_licenses>
+    <dc_rights_rightsOwners type="list">
+      <Auteursrechthouder></Auteursrechthouder>
+    </dc_rights_rightsOwners>
+    <dc_rights_rightsHolders type="list">
+      <Licentiehouder></Licentiehouder>
+    </dc_rights_rightsHolders>
+    <dc_rights_credit></dc_rights_credit>
+    <dc_rights_comment></dc_rights_comment>
+</VIAA>

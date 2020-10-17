@@ -7,10 +7,13 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
+use Twig\Environment;
+use Twig\Loader\FilesystemLoader;
 
 class OffloadImagesCommand extends Command
 {
     private $params;
+    private $template;
 
     private $collections;
     private $offloadStatus;
@@ -48,13 +51,15 @@ class OffloadImagesCommand extends Command
         $this->ftpUtil = new FtpUtil($this->params);
 
         $lastOffloadTimestamp = 0;
-        $lastTimestampFilename = $this->params->get('last_offload_timestamp_filename');
-        if(file_exists($lastTimestampFilename)) {
-            $file = fopen($lastTimestampFilename, "r") or die("Unable to open file containing last offload timestamp ('" . $lastTimestampFilename . "').");
+        $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
+        if(file_exists($lastTimestampFile)) {
+            $file = fopen($lastTimestampFile, "r") or die("Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
             $lastOffloadTimestamp = fgets($file);
             fclose($file);
         }
 
+        $templateFolder = $this->params->get('template_folder');
+        $templateFile = $this->params->get('template_file');
         $this->collections = $this->params->get('collections');
         $this->offloadStatus = $this->params->get('offload_status');
 
@@ -71,6 +76,9 @@ class OffloadImagesCommand extends Command
                 $resourceId = $resource['ref'];
                 $resourceData = $this->resourceSpace->getResourceDataIfFieldContains($resourceId, $this->offloadStatus['key'], $filter);
                 if($resourceData != null) {
+
+                    $md5 = null;
+
                     //Check when the file was last modified
                     if(array_key_exists('file_modified', $resource)) {
                         $fileModifiedDate = $resource['file_modified'];
@@ -105,7 +113,17 @@ class OffloadImagesCommand extends Command
                                 $data[$field['name']] = $field['value'];
                             }
 
-                            //TODO generate metadata XML
+                            if($this->template == null) {
+                                $loader = new FilesystemLoader($templateFolder);
+                                $twig = new Environment($loader);
+                                $this->template = $twig->load($templateFile);
+                            }
+                            $xmlData = $this->template->render(array(
+                                'resourcespace' => $data,
+                                'resource_id' => $resourceId,
+                                'collection' => $collection,
+                                'md5_hash' => $md5
+                            ));
                         } else {
                             echo 'NO offload resource metadata ' . $resourceId . ' (modified ' . $metadataModifiedDate . ')' . PHP_EOL;
                         }
