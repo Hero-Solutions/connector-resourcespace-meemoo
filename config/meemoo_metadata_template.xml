@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <VIAA>
   <CP>{{ collection }}</CP>
-	<CP_id></CP_id>
-	<Original_CP></Original_CP>
+    <CP_id></CP_id>
+    <Original_CP></Original_CP>
     <dc_source>{{ resourcespace.originalfilename }}</dc_source>
     <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
     <dc_identifier_localids type="list">
