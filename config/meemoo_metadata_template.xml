@@ -1,81 +1,106 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <VIAA>
+
+<!-- this is a sample of a comment -->
+<!-- below is a sample of an if-else-statement -->
+{% if collection == 'FOMU' %}
+  <CP>Something FOMU</CP>
+{% elseif collection == 'MOMU' %}
+  <CP>Something else MOMU</CP>
+{% elseif collection == 'DIVA' %}
+  <CP>And yet something else DIVA</CP>
+{% else %}
+  <CP>Maybe nothing. Or maybe pizza.</CP>
+{% endif %}
+
   <CP>{{ collection }}</CP>
-    <CP_id></CP_id>
-    <Original_CP></Original_CP>
-    <dc_source>{{ resource.originalfilename }}</dc_source>
-    <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
-    <dc_identifier_localids type="list">
-      <Bestandsnaam>{{ resource.originalfilename }}</Bestandsnaam>
-    </dc_identifier_localids>
-    <md5>{{ md5_hash }}</md5>
-    <dc_title>{{ resource.title }}</dc_title>
-    <dc_titles type="list">
-      <archief></archief>
-      <deelarchief></deelarchief>
-      <reeks></reeks>
-      <deelreeks></deelreeks>
-      <serie></serie>
-      <serienummer></serienummer>
-      <seizoen></seizoen>
-      <seizoennummer></seizoennummer>
-      <programma></programma>
-      <alternatief></alternatief>
-    </dc_titles>
-    <dcterms_issued></dcterms_issued>
-    <dcterms_created></dcterms_created>
-    <ebu_objectType></ebu_objectType>
-    <dc_creators type="list">
-     <Maker></Maker>
-     <Archiefvormer></Archiefvormer>
-     <Performer></Performer>
-    </dc_creators>
-    <dc_contributors type="list">
-      <Bijdrager></Bijdrager>
-      <Geluidsman></Geluidsman>
-    </dc_contributors>
-    <dc_publishers type="list">
-     <Publisher>{{ resource.publisher }}</Publisher>
-     <Distributeur></Distributeur>
-     <Persagentschap></Persagentschap>
-    </dc_publishers>
-    <dc_description></dc_description>
-    <dc_description_lang></dc_description_lang>
-    <dc_description_programme></dc_description_programme>
-    <dc_description_cast></dc_description_cast>
-    <dc_description_ondertitels></dc_description_ondertitels>
-    <dc_description_transcriptie></dc_description_transcriptie>
-    <dc_description_categorie></dc_description_categorie>
-    <dc_types type="list">
-      <multiselect></multiselect>
-    </dc_types>
-    <dc_coverages type="list">
-      <ruimte></ruimte>
-      <tijd></tijd>
-    </dc_coverages>
-    <dc_subjects type="list">
-     <Trefwoord></Trefwoord>
-     <Trefwoord></Trefwoord>
-    </dc_subjects>
-    <dc_languages type="list">
-      {% for language in languages %}
-      <multiselect>{{ language }}</multiselect>
-      {% endfor %}
-    </dc_languages>
-    <dc_rights_licenses type="list">
-      {% for right in rights %}
-      <multiselect>{{ right }}</multiselect>
-      {% endfor %}
-    {% for content in contents %}
-    <multiselect>{{ content }}</multiselect>
-    {% endfor %}
-    </dc_rights_licenses>
-    <dc_rights_rightsOwners type="list">
-      <Auteursrechthouder></Auteursrechthouder>
-    </dc_rights_rightsOwners>
-    <dc_rights_rightsHolders type="list">
-      <Licentiehouder></Licentiehouder>
-    </dc_rights_rightsHolders>
-    <dc_rights_credit></dc_rights_credit>
-    <dc_rights_comment></dc_rights_comment>
+  <CP_id></CP_id>
+  <Original_CP></Original_CP>
+  <dc_source>{{ resource.originalfilename }}</dc_source>
+  <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
+  <dc_identifier_localids type="list">
+    <Bestandsnaam>{{ resource.originalfilename }}</Bestandsnaam>
+  </dc_identifier_localids>
+  <md5>{{ md5_hash }}</md5>
+  <dc_title>{{ resource.title }}</dc_title>
+  <dc_titles type="list">
+    <archief></archief>
+    <deelarchief></deelarchief>
+    <reeks></reeks>
+    <deelreeks></deelreeks>
+    <serie></serie>
+    <serienummer></serienummer>
+    <seizoen></seizoen>
+    <seizoennummer></seizoennummer>
+    <programma></programma>
+    <alternatief></alternatief>
+  </dc_titles>
+  <dcterms_issued></dcterms_issued>
+  <dcterms_created></dcterms_created>
+  <ebu_objectType></ebu_objectType>
+  <dc_creators type="list">
+   <Maker></Maker>
+   <Archiefvormer></Archiefvormer>
+   <Performer></Performer>
+  </dc_creators>
+  <dc_contributors type="list">
+    <Bijdrager></Bijdrager>
+    <Geluidsman></Geluidsman>
+  </dc_contributors>
+  <dc_publishers type="list">
+   <Publisher>{{ resource.publisher }}</Publisher>
+   <Distributeur></Distributeur>
+   <Persagentschap></Persagentschap>
+  </dc_publishers>
+  <dc_description>{{ resource.description }}</dc_description>
+  <dc_description_lang></dc_description_lang>
+  <dc_description_programme></dc_description_programme>
+  <dc_description_cast></dc_description_cast>
+  <dc_description_ondertitels></dc_description_ondertitels>
+  <dc_description_transcriptie></dc_description_transcriptie>
+  <dc_description_categorie></dc_description_categorie>
+  <dc_types type="list">
+    <multiselect></multiselect>
+  </dc_types>
+  <dc_coverages type="list">
+    <ruimte></ruimte>
+    <tijd></tijd>
+  </dc_coverages>
+{% if subjects is not empty %}
+  <dc_subjects type="list">
+{% for subject in subjects %}
+   <Trefwoord>{{ subject }}</Trefwoord>
+{% endfor %}
+  </dc_subjects>
+{% endif %}
+{% if languages is not empty %}
+  <dc_languages type="list">
+{% for language in languages %}
+    <multiselect>{{ language }}</multiselect>
+{% endfor %}
+  </dc_languages>
+{% endif %}
+{% if rights_licenses is not empty %}
+  <dc_rights_licenses type="list">
+{% for rights_license in rights_licenses %}
+    <multiselect>{{ rights_license }}</multiselect>
+{% endfor %}
+  </dc_rights_licenses>
+{% endif %}
+{% if rights_owners is not empty %}
+  <dc_rights_rightsOwners type="list">
+{% for rights_owner in rights_owners %}
+    <Auteursrechthouder>{{ rights_owner }}</Auteursrechthouder>
+{% endfor %}
+  </dc_rights_rightsOwners>
+{% endif %}
+{% if rights_holders is not empty %}
+  <dc_rights_rightsHolders type="list">
+{% for rights_owner in rights_owners %}
+    <Licentiehouder>{{ rights_owner }}</Licentiehouder>
+{% endfor %}
+  </dc_rights_rightsHolders>
+{% endif %}
+  <dc_rights_credit>{{ rights_credit }}</dc_rights_credit>
+  <dc_rights_comment>{{ rights_comment }}</dc_rights_comment>
 </VIAA>
