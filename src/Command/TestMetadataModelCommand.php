@@ -49,6 +49,10 @@ class TestMetadataModelCommand extends Command
         if (!is_dir($metadataDestDir)) {
             mkdir($metadataDestDir);
         }
+        $resourceDestDir = $this->params->get('resource_dest_dir');
+        if (!is_dir($resourceDestDir)) {
+            mkdir($resourceDestDir);
+        }
 
         $templateFolder = $this->params->get('template_folder');
         $templateFile = $this->params->get('template_file');
@@ -89,10 +93,12 @@ class TestMetadataModelCommand extends Command
                             $fileModifiedTimestamp = strtotime($fileModifiedDate);
                         }
                         if($fileModifiedTimestamp > $lastOffloadTimestamp) {
+                            $destFilename = $resourceDestDir . '/' . $data['originalfilename'];
                             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId);
-                            $md5 = md5_file($resourceUrl);
-
-                            //TODO generate MD5
+                            copy($resourceUrl, $destFilename);
+                            $md5 = md5_file($destFilename);
+                            
+                            //TODO actually upload the file through FTP, then delete it
 
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
