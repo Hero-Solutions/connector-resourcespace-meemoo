@@ -97,8 +97,10 @@ class TestMetadataModelCommand extends Command
                             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId);
                             copy($resourceUrl, $destFilename);
                             $md5 = md5_file($destFilename);
-                            
-                            //TODO actually upload the file through FTP, then delete it
+
+                            //TODO actually upload the file through FTP
+
+                            unlink($destFilename);
 
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
