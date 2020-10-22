@@ -10,5 +10,4 @@
 /vendor/
 ###< symfony/framework-bundle ###
 .idea/*
-/metadata_files/*
-/resources/*
+/output/*

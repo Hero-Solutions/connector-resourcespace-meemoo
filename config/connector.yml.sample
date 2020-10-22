@@ -9,8 +9,7 @@ parameters:
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
   template_folder: 'config'
   template_file: 'meemoo_metadata_template.xml'
-  template_dest_dir: 'metadata_files'
-  resource_dest_dir: 'resources'
+  output_dir: 'output'
 
   # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
   # remote_directory MUST have a trailing slash

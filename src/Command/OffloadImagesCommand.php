@@ -46,6 +46,10 @@ class OffloadImagesCommand extends Command
             $lastOffloadTimestamp = fgets($file);
             fclose($file);
         }
+        $outputDir = $this->params->get('output_dir');
+        if (!is_dir($outputDir)) {
+            mkdir($outputDir);
+        }
 
         $templateFolder = $this->params->get('template_folder');
         $templateFile = $this->params->get('template_file');
@@ -59,12 +63,24 @@ class OffloadImagesCommand extends Command
         $offloaded = $this->offloadStatus['offloaded_value'];
         $filter = array($offload, $offloadButKeepOriginal, $offloaded);
 
+        // Loop through all collections
         foreach($this->collections['values'] as $collection) {
             $allResources = $this->resourceSpace->getAllResources($collectionKey, $collection);
             foreach($allResources as $resource) {
                 $resourceId = $resource['ref'];
                 $resourceData = $this->resourceSpace->getResourceDataIfFieldContains($resourceId, $this->offloadStatus['key'], $filter);
+
                 if($resourceData != null) {
+
+                    // For debugging purposes
+//                    var_dump($resource);
+
+                    $data = array();
+                    foreach($resourceData as $field) {
+                        $data[$field['name']] = $field['value'];
+                    }
+
+                    $filename = pathinfo($data['originalfilename'], PATHINFO_FILENAME);
 
                     $md5 = null;
 
@@ -76,14 +92,19 @@ class OffloadImagesCommand extends Command
                             $fileModifiedTimestamp = strtotime($fileModifiedDate);
                         }
                         if($fileModifiedTimestamp > $lastOffloadTimestamp) {
+                            $destFilename = $outputDir . '/' . $data['originalfilename'];
                             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId);
-                            $this->ftpUtil->copyFile($resourceUrl);
+                            copy($resourceUrl, $destFilename);
+                            $md5 = md5_file($destFilename);
 
-                            //TODO generate MD5
+                            //TODO uncomment when we want to actually upload through FTP
+//                            $this->ftpUtil->copyFile($resourceUrl);
 
-                            echo 'Offloaded resource file ' . $resourceId . ' (modified ' . $fileModifiedDate . ')' . PHP_EOL;
+                            unlink($destFilename);
+
+                            echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
-                            echo 'NO offload resource file ' . $resourceId . ' (modified ' . $fileModifiedDate . ')' . PHP_EOL;
+                            echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will NOT be offloaded' . PHP_EOL;
                         }
                     }
 
@@ -95,13 +116,6 @@ class OffloadImagesCommand extends Command
                             $metadataModifiedTimestamp = strtotime($metadataModifiedDate);
                         }
                         if($metadataModifiedTimestamp > $lastOffloadTimestamp) {
-                            echo 'Offload resource metadata ' . $resourceId . ' (modified ' . $metadataModifiedDate . ')' . PHP_EOL;
-
-                            $data = array();
-                            foreach($resourceData as $field) {
-                                $data[$field['name']] = $field['value'];
-                            }
-
                             if($this->template == null) {
                                 $loader = new FilesystemLoader($templateFolder);
                                 $twig = new Environment($loader);
@@ -113,8 +127,18 @@ class OffloadImagesCommand extends Command
                                 'collection' => $collection,
                                 'md5_hash' => $md5
                             ));
+
+                            $xmlFile = $outputDir . '/' . $filename . '.xml';
+                            file_put_contents($xmlFile, $xmlData);
+
+
+                            //TODO uncomment when we want to actually upload through FTP
+//                            $this->ftpUtil->copyFile($xmlFile);
+//                            unlink($xmlFile);
+
+                            echo 'Resource metadata ' . $filename . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
-                            echo 'NO offload resource metadata ' . $resourceId . ' (modified ' . $metadataModifiedDate . ')' . PHP_EOL;
+                            echo 'Resource metadata ' . $filename . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will NOT be offloaded' . PHP_EOL;
                         }
                     }
                     echo PHP_EOL;
