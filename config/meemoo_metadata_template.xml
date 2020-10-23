@@ -2,19 +2,9 @@
 <VIAA>
 
 <!-- this is a sample of a comment -->
-<!-- below is a sample of an if-else-statement -->
-{% if collection == 'FOMU' %}
-  <CP>Something FOMU</CP>
-{% elseif collection == 'MOMU' %}
-  <CP>Something else MOMU</CP>
-{% elseif collection == 'DIVA' %}
-  <CP>And yet something else DIVA</CP>
-{% else %}
-  <CP>Maybe nothing. Or maybe pizza.</CP>
-{% endif %}
 
-  <CP>{{ collection }}</CP>
-  <CP_id></CP_id>
+  <CP>{{ resource.publisher }}</CP>
+  <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
   <Original_CP></Original_CP>
   <dc_source>{{ resource.originalfilename }}</dc_source>
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
@@ -22,7 +12,7 @@
     <Bestandsnaam>{{ resource.originalfilename }}</Bestandsnaam>
   </dc_identifier_localids>
   <md5>{{ md5_hash }}</md5>
-  <dc_title>{{ resource.title }}</dc_title>
+  <dc_title>{{ attribute(conversion_table.title, resource.title) }}</dc_title>
   <dc_titles type="list">
     <archief></archief>
     <deelarchief></deelarchief>

@@ -125,7 +125,8 @@ class TestMetadataModelCommand extends Command
                                 'resource' => $data,
                                 'resource_id' => $resourceId,
                                 'collection' => $collection,
-                                'md5_hash' => $md5
+                                'md5_hash' => $md5,
+                                'conversion_table' => $this->params->get('conversion_table')
                             ));
 
                             $xmlFile = $outputDir . '/' . $filename . '.xml';
