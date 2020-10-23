@@ -34,3 +34,12 @@ parameters:
     offload_value: 'Ready for offload'
     offload_but_keep_original_value: 'Offload but keep original'
     offloaded_value: 'Offloaded'
+
+  conversion_table:
+    cp_id:
+      FOMU: 1
+      MOMU: 2
+      DIVA: 3
+      DEMUSEUMSTICHTING: 7
+    title:
+      Multi Test: 'the MULTITEST THING'

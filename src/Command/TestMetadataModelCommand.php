@@ -55,6 +55,7 @@ class TestMetadataModelCommand extends Command
         $templateFile = $this->params->get('template_file');
         $this->collections = $this->params->get('collections');
         $this->offloadStatus = $this->params->get('offload_status');
+        $conversionTable = $this->params->get('conversion_table');
 
         $collectionKey = $this->collections['key'];
 
@@ -125,7 +126,8 @@ class TestMetadataModelCommand extends Command
                                 'resource' => $data,
                                 'resource_id' => $resourceId,
                                 'collection' => $collection,
-                                'md5_hash' => $md5
+                                'md5_hash' => $md5,
+                                'conversion_table' => $conversionTable
                             ));
 
                             $xmlFile = $outputDir . '/' . $filename . '.xml';
