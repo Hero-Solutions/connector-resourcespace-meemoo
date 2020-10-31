@@ -34,6 +34,7 @@ parameters:
     offload_value: 'Ready for offload'
     offload_but_keep_original_value: 'Offload but keep original'
     offloaded_value: 'Offloaded'
+    offload_pending: 'Pending'
 
   conversion_table:
     cp_id:
