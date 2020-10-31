@@ -84,6 +84,7 @@ class OffloadImagesCommand extends Command
                     $filename = pathinfo($data['originalfilename'], PATHINFO_FILENAME);
 
                     $md5 = null;
+                    $fileModified = false;
 
                     //Check when the file was last modified
                     if(array_key_exists('file_modified', $resource)) {
@@ -101,6 +102,8 @@ class OffloadImagesCommand extends Command
                             //TODO uncomment when we want to actually upload through FTP
 //                            $this->ftpUtil->copyFile($resourceUrl);
 
+                            $fileModified = true;
+
                             unlink($destFilename);
 
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
@@ -110,13 +113,15 @@ class OffloadImagesCommand extends Command
                     }
 
                     //Check when the metadata was last modified
-                    if(array_key_exists('modified', $resource)) {
+                    if($fileModified || array_key_exists('modified', $resource)) {
                         $metadataModifiedTimestamp = 0;
-                        $metadataModifiedDate = $resource['modified'];
-                        if(strlen($metadataModifiedDate) > 0) {
-                            $metadataModifiedTimestamp = strtotime($metadataModifiedDate);
+                        if(!$fileModified) {
+                            $metadataModifiedDate = $resource['modified'];
+                            if (strlen($metadataModifiedDate) > 0) {
+                                $metadataModifiedTimestamp = strtotime($metadataModifiedDate);
+                            }
                         }
-                        if($metadataModifiedTimestamp > $lastOffloadTimestamp) {
+                        if($fileModified || $metadataModifiedTimestamp > $lastOffloadTimestamp) {
                             if($this->template == null) {
                                 $loader = new FilesystemLoader($templateFolder);
                                 $twig = new Environment($loader);

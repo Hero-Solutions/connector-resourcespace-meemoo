@@ -65,6 +65,12 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
+    public function updateField($id, $field, $value)
+    {
+        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . $value);
+        return json_decode($data, true);
+    }
+
     private function doApiCall($query)
     {
         $query = 'user=' . $this->apiUsername . '&function=' . $query;
