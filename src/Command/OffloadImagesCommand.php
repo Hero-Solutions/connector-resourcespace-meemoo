@@ -112,16 +112,17 @@ class OffloadImagesCommand extends Command
                         }
                     }
 
+                    $updateMetadata = $fileModified;
+
                     //Check when the metadata was last modified
-                    if($fileModified || array_key_exists('modified', $resource)) {
-                        $metadataModifiedTimestamp = 0;
-                        if(!$fileModified) {
+                    if($updateMetadata || array_key_exists('modified', $resource)) {
+                        if(!$updateMetadata) {
                             $metadataModifiedDate = $resource['modified'];
                             if (strlen($metadataModifiedDate) > 0) {
-                                $metadataModifiedTimestamp = strtotime($metadataModifiedDate);
+                                $updateMetadata = strtotime($metadataModifiedDate) > $lastOffloadTimestamp;
                             }
                         }
-                        if($fileModified || $metadataModifiedTimestamp > $lastOffloadTimestamp) {
+                        if($updateMetadata) {
                             if($this->template == null) {
                                 $loader = new FilesystemLoader($templateFolder);
                                 $twig = new Environment($loader);
@@ -138,10 +139,10 @@ class OffloadImagesCommand extends Command
                             $xmlFile = $outputDir . '/' . $filename . '.xml';
                             file_put_contents($xmlFile, $xmlData);
 
-
                             //TODO uncomment when we want to actually upload through FTP
 //                            $this->ftpUtil->copyFile($xmlFile);
 //                            unlink($xmlFile);
+//                            $this->resourceSpace->updateField($resourceId, $this->offloadStatus['key'], $this->offloadStatus['offload_pending']);
 
                             echo 'Resource metadata ' . $filename . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
