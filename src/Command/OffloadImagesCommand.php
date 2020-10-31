@@ -100,7 +100,7 @@ class OffloadImagesCommand extends Command
                             $md5 = md5_file($destFilename);
 
                             //TODO uncomment when we want to actually upload through FTP
-//                            $this->ftpUtil->copyFile($resourceUrl);
+//                            $this->ftpUtil->copyFile($destFilename);
 
                             $fileModified = true;
 
