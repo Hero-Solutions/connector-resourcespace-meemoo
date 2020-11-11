@@ -49,14 +49,12 @@ class OffloadImagesCommand extends Command
         $supportedExtensions = $this->params->get('supported_extensions');
         $collections = $this->params->get('collections');
         $offloadStatus = $this->params->get('offload_status');
+        $offloadValues = $offloadStatus['values'];
         $conversionTable = $this->params->get('conversion_table');
 
         $collectionKey = $collections['key'];
 
-        $offload = $offloadStatus['offload_value'];
-        $offloadButKeepOriginal = $offloadStatus['offload_but_keep_original_value'];
-        $offloaded = $offloadStatus['offloaded_value'];
-        $filter = array($offload, $offloadButKeepOriginal, $offloaded);
+        $filter = array($offloadValues['offload'], $offloadValues['offload_but_keep_original'], $offloadValues['offload_pending'], $offloadValues['offloaded']);
         $metadataTemplate = null;
 
         // Loop through all collections
@@ -133,6 +131,7 @@ class OffloadImagesCommand extends Command
                                 $xmlData = $metadataTemplate->render(array(
                                     'resource' => $data,
                                     'resource_id' => $resourceId,
+                                    'filename' => $uniqueFilename . '.' . $extension,
                                     'collection' => $collection,
                                     'md5_hash' => $md5,
                                     'conversion_table' => $conversionTable
@@ -151,7 +150,7 @@ class OffloadImagesCommand extends Command
                                     //Upload the XML file and delete locally
                                     $ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilename . '.xml');
                                     unlink($xmlFile);
-                                    $resourceSpace->updateField($resourceId, $offloadStatus['key'], $offloadStatus['offload_pending']);
+                                    $resourceSpace->updateField($resourceId, $offloadStatus['key'], $offloadValues['offload_pending']);
                                 }
 
                                 echo 'Resource metadata ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;

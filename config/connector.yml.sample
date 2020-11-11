@@ -41,10 +41,11 @@ parameters:
 
   offload_status:
     key: 'offloadstatus'
-    offload_value: 'Ready for offload'
-    offload_but_keep_original_value: 'Offload but keep original'
-    offloaded_value: 'Offloaded'
-    offload_pending: 'Pending'
+    values:
+      offload: 'Ready for offload'
+      offload_but_keep_original: 'Offload but keep original'
+      offloaded: 'Offloaded'
+      offload_pending: 'Pending'
 
   conversion_table:
     cp_id:
