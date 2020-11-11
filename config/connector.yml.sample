@@ -7,19 +7,29 @@ parameters:
     key: ''
 
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
+
   template_folder: 'config'
   template_file: 'meemoo_metadata_template.xml'
   output_dir: 'output'
 
+  allowed_extensions:
+    - png
+    - jpg
+    - jpeg
+    - tif
+    - tiff
+
   # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
-  # remote_directory MUST have a trailing slash
+  # remote_directory MUST have both a leading and trailing slash
   ftp_server:
     use_ssl: true
     url: ''
     port: 22
-    username: ''
-    password: ''
-    remote_directory: ''
+    credentials:
+      DEMUSEUMSTICHTING:
+        username: ''
+        password: ''
+        remote_directory: ''
 
   collections:
     key: 'publisher'

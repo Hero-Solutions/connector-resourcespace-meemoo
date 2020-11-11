@@ -100,11 +100,10 @@ class OffloadImagesCommand extends Command
                             $md5 = md5_file($destFilename);
 
                             //TODO uncomment when we want to actually upload through FTP
-//                            $this->ftpUtil->copyFile($destFilename);
+                            $this->ftpUtil->copyFile($collection, $destFilename);
+                            unlink($destFilename);
 
                             $fileModified = true;
-
-                            unlink($destFilename);
 
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {

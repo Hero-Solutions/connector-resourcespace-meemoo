@@ -58,7 +58,7 @@
   </dc_coverages>
   <test>resource.keywords</test>
   <dc_subjects type="list">
-{% for subject in resource.keywords|split(,) %}
+{% for subject in resource.keywords|split(',') %}
    <Trefwoord>{{ subject }}</Trefwoord>
 {% endfor %}
   </dc_subjects>

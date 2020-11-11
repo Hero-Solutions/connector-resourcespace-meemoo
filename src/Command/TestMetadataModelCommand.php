@@ -84,6 +84,7 @@ class TestMetadataModelCommand extends Command
                     $filename = pathinfo($data['originalfilename'], PATHINFO_FILENAME);
 
                     $md5 = null;
+                    $fileModified = false;
 
                     //Check when the file was last modified
                     if(array_key_exists('file_modified', $resource)) {
@@ -99,9 +100,10 @@ class TestMetadataModelCommand extends Command
                             $md5 = md5_file($destFilename);
 
                             //TODO uncomment when we want to actually upload through FTP
-//                            $this->ftpUtil->copyFile($resourceUrl);
+//                            $this->ftpUtil->copyFile($collection, $resourceUrl);
+//                            unlink($destFilename);
 
-                            unlink($destFilename);
+                            $fileModified = true;
 
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
@@ -109,14 +111,17 @@ class TestMetadataModelCommand extends Command
                         }
                     }
 
+                    $updateMetadata = $fileModified;
+
                     //Check when the metadata was last modified
-                    if(array_key_exists('modified', $resource)) {
-                        $metadataModifiedTimestamp = 0;
-                        $metadataModifiedDate = $resource['modified'];
-                        if(strlen($metadataModifiedDate) > 0) {
-                            $metadataModifiedTimestamp = strtotime($metadataModifiedDate);
+                    if($updateMetadata || array_key_exists('modified', $resource)) {
+                        if(!$updateMetadata) {
+                            $metadataModifiedDate = $resource['modified'];
+                            if (strlen($metadataModifiedDate) > 0) {
+                                $updateMetadata = strtotime($metadataModifiedDate) > $lastOffloadTimestamp;
+                            }
                         }
-                        if($metadataModifiedTimestamp > $lastOffloadTimestamp) {
+                        if($updateMetadata) {
                             if($this->template == null) {
                                 $loader = new FilesystemLoader($templateFolder);
                                 $twig = new Environment($loader);
@@ -133,9 +138,8 @@ class TestMetadataModelCommand extends Command
                             $xmlFile = $outputDir . '/' . $filename . '.xml';
                             file_put_contents($xmlFile, $xmlData);
 
-
                             //TODO uncomment when we want to actually upload through FTP
-//                            $this->ftpUtil->copyFile($xmlFile);
+//                            $this->ftpUtil->copyFile($collection, $xmlFile);
 //                            unlink($xmlFile);
 
                             echo 'Resource metadata ' . $filename . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
