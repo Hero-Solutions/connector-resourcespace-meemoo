@@ -163,5 +163,11 @@ class TestMetadataModelCommand extends Command
                 }
             }
         }
+
+        if($this->getName() == 'app:offload-images') {
+            $file = fopen($lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
+            fwrite($file, time());
+            fclose($file);
+        }
     }
 }
