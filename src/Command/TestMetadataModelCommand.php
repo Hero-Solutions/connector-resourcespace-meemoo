@@ -141,6 +141,7 @@ class TestMetadataModelCommand extends Command
                             //TODO uncomment when we want to actually upload through FTP
 //                            $this->ftpUtil->copyFile($collection, $xmlFile);
 //                            unlink($xmlFile);
+//                            $this->resourceSpace->updateField($resourceId, $this->offloadStatus['key'], $this->offloadStatus['offload_pending']);
 
                             echo 'Resource metadata ' . $filename . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
