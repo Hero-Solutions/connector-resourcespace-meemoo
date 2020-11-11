@@ -19,6 +19,7 @@ class TestMetadataModelCommand extends Command
     private $offloadStatus;
 
     private $resourceSpace;
+    private $ftpUtil;
 
     public function __construct(ParameterBagInterface $params)
     {
@@ -45,15 +46,16 @@ class TestMetadataModelCommand extends Command
             $lastOffloadTimestamp = fgets($file);
             fclose($file);
         }
-        $metadataDestDir = $this->params->get('template_dest_dir');
-        if (!is_dir($metadataDestDir)) {
-            mkdir($metadataDestDir);
+        $outputDir = $this->params->get('output_dir');
+        if (!is_dir($outputDir)) {
+            mkdir($outputDir);
         }
 
         $templateFolder = $this->params->get('template_folder');
         $templateFile = $this->params->get('template_file');
         $this->collections = $this->params->get('collections');
         $this->offloadStatus = $this->params->get('offload_status');
+        $conversionTable = $this->params->get('conversion_table');
 
         $collectionKey = $this->collections['key'];
 
@@ -62,6 +64,7 @@ class TestMetadataModelCommand extends Command
         $offloaded = $this->offloadStatus['offloaded_value'];
         $filter = array($offload, $offloadButKeepOriginal, $offloaded);
 
+        // Loop through all collections
         foreach($this->collections['values'] as $collection) {
             $allResources = $this->resourceSpace->getAllResources($collectionKey, $collection);
             foreach($allResources as $resource) {
@@ -70,6 +73,7 @@ class TestMetadataModelCommand extends Command
 
                 if($resourceData != null) {
 
+                    // For debugging purposes
 //                    var_dump($resource);
 
                     $data = array();
@@ -89,10 +93,15 @@ class TestMetadataModelCommand extends Command
                             $fileModifiedTimestamp = strtotime($fileModifiedDate);
                         }
                         if($fileModifiedTimestamp > $lastOffloadTimestamp) {
+                            $destFilename = $outputDir . '/' . $data['originalfilename'];
                             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId);
-                            $md5 = md5_file($resourceUrl);
+                            copy($resourceUrl, $destFilename);
+                            $md5 = md5_file($destFilename);
 
-                            //TODO generate MD5
+                            //TODO uncomment when we want to actually upload through FTP
+//                            $this->ftpUtil->copyFile($resourceUrl);
+
+                            unlink($destFilename);
 
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
@@ -117,9 +126,17 @@ class TestMetadataModelCommand extends Command
                                 'resource' => $data,
                                 'resource_id' => $resourceId,
                                 'collection' => $collection,
-                                'md5_hash' => $md5
+                                'md5_hash' => $md5,
+                                'conversion_table' => $conversionTable
                             ));
-                            file_put_contents($metadataDestDir . '/' . $filename . '.xml', $xmlData);
+
+                            $xmlFile = $outputDir . '/' . $filename . '.xml';
+                            file_put_contents($xmlFile, $xmlData);
+
+
+                            //TODO uncomment when we want to actually upload through FTP
+//                            $this->ftpUtil->copyFile($xmlFile);
+//                            unlink($xmlFile);
 
                             echo 'Resource metadata ' . $filename . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {

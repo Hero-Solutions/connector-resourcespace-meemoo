@@ -45,4 +45,4 @@ For now, the project is only set up to test the meemoo metadata model. To do so,
 bin/console app:test-metadata
 ```
 
-This will generate zero, one or more metadata files inside the folder 'metadata_files' based on the template that is defined in 'meemoo_metadata_template.xml' inside the 'config' folder. The amount of files depend on the amount of resources in your ResourceSpace installation that have a non-empty 'offloadStatus'.
+This will generate zero, one or more metadata files inside the folder 'output' based on the template that is defined in 'meemoo_metadata_template.xml' inside the 'config' folder. The amount of files depend on the amount of resources in your ResourceSpace installation that have a non-empty 'offloadStatus'.

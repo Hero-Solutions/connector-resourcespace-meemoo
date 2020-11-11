@@ -9,7 +9,7 @@ parameters:
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
   template_folder: 'config'
   template_file: 'meemoo_metadata_template.xml'
-  template_dest_dir: 'metadata_files'
+  output_dir: 'output'
 
   # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
   # remote_directory MUST have a trailing slash
@@ -34,3 +34,13 @@ parameters:
     offload_value: 'Ready for offload'
     offload_but_keep_original_value: 'Offload but keep original'
     offloaded_value: 'Offloaded'
+    offload_pending: 'Pending'
+
+  conversion_table:
+    cp_id:
+      FOMU: 1
+      MOMU: 2
+      DIVA: 3
+      DEMUSEUMSTICHTING: 7
+    title:
+      Multi Test: 'the MULTITEST THING'
