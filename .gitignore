@@ -11,3 +11,4 @@
 ###< symfony/framework-bundle ###
 .idea/*
 /output/*
+last_offload_timestamp.txt
