@@ -100,7 +100,7 @@ class TestMetadataModelCommand extends Command
                             $md5 = md5_file($destFilename);
 
                             //TODO uncomment when we want to actually upload through FTP
-//                            $this->ftpUtil->copyFile($collection, $resourceUrl);
+//                            $this->ftpUtil->copyFile($collection, $destFilename);
 //                            unlink($destFilename);
 
                             $fileModified = true;
