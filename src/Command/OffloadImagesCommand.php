@@ -100,8 +100,8 @@ class OffloadImagesCommand extends Command
                             $md5 = md5_file($destFilename);
 
                             //TODO uncomment when we want to actually upload through FTP
-                            $this->ftpUtil->copyFile($collection, $destFilename);
-                            unlink($destFilename);
+//                            $this->ftpUtil->copyFile($collection, $destFilename);
+//                            unlink($destFilename);
 
                             $fileModified = true;
 
@@ -139,7 +139,7 @@ class OffloadImagesCommand extends Command
                             file_put_contents($xmlFile, $xmlData);
 
                             //TODO uncomment when we want to actually upload through FTP
-//                            $this->ftpUtil->copyFile($xmlFile);
+//                            $this->ftpUtil->copyFile($collection, $xmlFile);
 //                            unlink($xmlFile);
 //                            $this->resourceSpace->updateField($resourceId, $this->offloadStatus['key'], $this->offloadStatus['offload_pending']);
 
