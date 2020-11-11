@@ -53,5 +53,10 @@ parameters:
       MOMU: 2
       DIVA: 3
       DEMUSEUMSTICHTING: 7
+    original_cp:
+      FOMU: 1
+      MOMU: 2
+      DIVA: 3
+      DEMUSEUMSTICHTING: 7
     title:
       Multi Test: 'the MULTITEST THING'
