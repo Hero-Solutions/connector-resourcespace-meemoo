@@ -66,13 +66,12 @@
     <ruimte></ruimte>
     <tijd></tijd>
   </dc_coverages>
-{% if subjects is not empty %}
+  <test>resource.keywords</test>
   <dc_subjects type="list">
-{% for subject in subjects %}
+{% for subject in resource.keywords|split(,) %}
    <Trefwoord>{{ subject }}</Trefwoord>
 {% endfor %}
   </dc_subjects>
-{% endif %}
 {% if languages is not empty %}
   <dc_languages type="list">
 {% for language in languages %}

@@ -6,6 +6,7 @@ The connector requires the following components (specific installation instructi
 
 * Access to a ResourceSpace instance
 * PHP >= 7.1, you can find the current latest version of PHP for Windows (7.4) [here](https://windows.php.net/downloads/releases/php-7.4.11-Win32-vc15-x64.zip), available on the [download page](https://windows.php.net/download) of php.net.
+* PHP openssl and ssh2 extensions
 * Symfony 4.4, you can download the Windows installer [here](https://getcomposer.org/Composer-Setup.exe), available on the [download page](https://getcomposer.org/download) of getcomposer.org.
 * [Git Bash](https://git-scm.com/downloads), or an alternative Git command line tool for non-Windows users.
 
