@@ -20,7 +20,7 @@ class FtpUtil
         $this->ftpCredentials = $ftpServer['credentials'];
     }
 
-    public function copyFile($collection, $fileURL)
+    public function uploadFile($collection, $fileURL)
     {
         echo 'Copy file ' . $fileURL . PHP_EOL;
         $filename = substr($fileURL, strrpos($fileURL, '/') + 1);
