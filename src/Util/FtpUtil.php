@@ -20,10 +20,9 @@ class FtpUtil
         $this->ftpCredentials = $ftpServer['credentials'];
     }
 
-    public function uploadFile($collection, $fileURL)
+    public function uploadFile($collection, $localFilename, $remoteFilename)
     {
-        echo 'Copy file ' . $fileURL . PHP_EOL;
-        $filename = substr($fileURL, strrpos($fileURL, '/') + 1);
+        echo 'Copy file ' . $localFilename . PHP_EOL;
         if(!array_key_exists($collection, $this->ftpCredentials)) {
             echo 'ERROR: Unknown FTP credentials for collection "' . $collection . '", please add them in config/connector.yml.' . PHP_EOL;
         } else {
@@ -46,8 +45,8 @@ class FtpUtil
                     $resConnection = ssh2_connect($this->ftpUrl, $this->ftpPort);
                     if (ssh2_auth_password($resConnection, $credentials['username'], $credentials['password'])) {
                         $resSFTP = ssh2_sftp($resConnection);
-                        $resFile = fopen('ssh2.sftp://' . $resSFTP . $credentials['remote_directory'] . $filename, 'w');
-                        $srcFile = fopen($fileURL, 'r');
+                        $resFile = fopen('ssh2.sftp://' . $resSFTP . $credentials['remote_directory'] . $remoteFilename, 'w');
+                        $srcFile = fopen($localFilename, 'r');
                         $writtenBytes = stream_copy_to_stream($srcFile, $resFile);
                         fclose($resFile);
                         fclose($srcFile);
@@ -56,7 +55,7 @@ class FtpUtil
                         echo 'Unable to authenticate on server.' . PHP_EOL;
                     }
                 } else {
-                    copy($fileURL, 'ftp://' . $credentials['username'] . ":" . $credentials['password'] . "@" . $this->ftpUrl . $credentials['remote_directory'] . $filename);
+                    copy($localFilename, 'ftp://' . $credentials['username'] . ":" . $credentials['password'] . "@" . $this->ftpUrl . $credentials['remote_directory'] . $remoteFilename);
                 }
             }
         }

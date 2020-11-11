@@ -141,15 +141,15 @@ class OffloadImagesCommand extends Command
                                 $xmlFile = $outputDir . '/' . $uniqueFilename . '.xml';
                                 file_put_contents($xmlFile, $xmlData);
 
-                                if($this->getName() == 'app-offload-images') {
+                                if($this->getName() == 'app:offload-images') {
                                     //Upload the image file and delete locally, but only if the file has been modified since the last offload
                                     if($fileModified && $localFilename != null) {
-                                        $ftpUtil->uploadFile($collection, $localFilename);
+                                        $ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename . '.' . $extension);
                                         unlink($localFilename);
                                     }
 
                                     //Upload the XML file and delete locally
-                                    $ftpUtil->uploadFile($collection, $xmlFile);
+                                    $ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilename . '.xml');
                                     unlink($xmlFile);
                                     $resourceSpace->updateField($resourceId, $offloadStatus['key'], $offloadStatus['offload_pending']);
                                 }

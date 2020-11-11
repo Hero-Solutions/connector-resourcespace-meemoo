@@ -6,7 +6,7 @@
   <CP>{{ resource.publisher }}</CP>
   <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
   <Original_CP></Original_CP>
-  <dc_source>{{ resource.originalfilename }}</dc_source>
+  <dc_source>{{ filename}}</dc_source>
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
   <dc_identifier_localids type="list">
     <Bestandsnaam>{{ resource.originalfilename }}</Bestandsnaam>
