@@ -108,12 +108,16 @@ class TestMetadataModelCommand extends Command
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                         } else {
                             echo 'Resource file ' . $filename . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will NOT be offloaded' . PHP_EOL;
-                            $md5 = $data['md5checksum'];
                         }
                     }
 
-                    //Always update the metadata if the file was modified
-                    $updateMetadata = $fileModified;
+                    $updateMetadata = false;
+                    if($fileModified) {
+                        //Always update the metadata if the file was modified
+                        $updateMetadata = true;
+                    } else {
+                        $md5 = $data['md5checksum'];
+                    }
 
                     if($updateMetadata || array_key_exists('modified', $resource)) {
                         if(!$updateMetadata) {
