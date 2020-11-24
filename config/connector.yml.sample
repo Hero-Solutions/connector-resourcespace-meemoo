@@ -12,7 +12,7 @@ parameters:
   template_file: 'meemoo_metadata_template.xml'
   output_dir: 'output'
 
-  allowed_extensions:
+  supported_extensions:
     - png
     - jpg
     - jpeg
@@ -29,7 +29,7 @@ parameters:
       DEMUSEUMSTICHTING:
         username: ''
         password: ''
-        remote_directory: ''
+        remote_directory: '/sample_dir/'
 
   collections:
     key: 'publisher'
@@ -48,15 +48,18 @@ parameters:
       offload_pending: 'Pending'
 
   conversion_table:
+    cp:
+      FOMU: 'FoMu'
+      MOMU: 'MoMu'
+      DIVA: 'Museum voor Edelsmeedkunst Juwelen en Diamant'
+      DEMUSEUMSTICHTING: 'MoMu'
     cp_id:
-      FOMU: 1
-      MOMU: 2
-      DIVA: 3
-      DEMUSEUMSTICHTING: 7
+      FOMU: ''
+      MOMU: ''
+      DIVA: ''
+      DEMUSEUMSTICHTING: ''
     original_cp:
       FOMU: 1
       MOMU: 2
       DIVA: 3
       DEMUSEUMSTICHTING: 7
-    title:
-      Multi Test: 'the MULTITEST THING'
