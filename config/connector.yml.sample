@@ -8,9 +8,10 @@ parameters:
 
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
 
+  output_folder: 'output'
   template_folder: 'config'
   template_file: 'meemoo_metadata_template.xml'
-  output_dir: 'output'
+  template_xsd_schema_file: 'viaa_metadatamodel_van_cp_naar_viaa.xsd'
 
   supported_extensions:
     - png

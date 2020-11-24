@@ -4,9 +4,9 @@
 <!-- LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML. ALSOOK AANPASSINGEN BIJ XXXXXXXXXX -->
 
   <CP>{{ resource.publisher }}</CP>
-  <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
-<!-- XXXXXXXXXX Placeholder voor bestandsnaam moet nog worden aangeleverd door Hero Solutions -->
-  <dc_source>{{ resource.originalfilename }}</dc_source>
+<!-- XXXXXXXXXX CP_id wordt niet aanvaard door het XSD schema, maar toch staat het in het voorbeeld van meemoo op Github? -->
+<!--  <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id> -->
+  <dc_source>{{ filename }}</dc_source>
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
   <dc_identifier_localids type="list">
 <!-- XXXXXXXXXX Ik heb deze tag gevonden in handleiding. Vermoedelijk correct al moeten we toch nog eens nagaan wat ze net verwachten van die IDs -->
@@ -19,6 +19,8 @@
   <dc_titles type="list">
     <alternatief>{{ resource.event }}</alternatief>
   </dc_titles>
+<!-- XXXXXXXXXX wat wordt hier exact mee bedoeld? Het is in elk geval een verplicht element -->
+  <dcterms_created>{{ resource.modified}}</dcterms_created>
   <dc_creators type="list">
 {% if resource.artworkcreator is not empty %}
 {% for artworkcreator in resource.artworkcreator|split(',') %}
@@ -30,7 +32,7 @@
 <!-- XXXXXXXXXX Digitalcreator is fictief en moeten worden aangepast in overleg met meemoo. Bijdrager komt uit handleiding en lijkt correct -->
 {% if resource.creator is not empty %}
 {% for creator in resource.creator|split(',') %}
-    <Digitalcreator>{{ resource.creator }}</Digitalcreator>
+<!--    <Digitalcreator>{{ resource.creator }}</Digitalcreator> -->
 {% endfor %}
 {% endif %}
 {% if resource.contributor is not empty %}
@@ -38,49 +40,49 @@
     <Bijdrager>{{ resource.contributor }}</Bijdrager>
 {% endfor %}
 {% endif %}
-  </dc_contributors>
+</dc_contributors>
+<!-- Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
+  <dc_subjects type="list">
+{% if resource.keywords is not empty %}
+{% for keyword in resource.keywords|split(',') %}
+    <Trefwoord>{{ keyword }}​​</Trefwoord>
+{% endfor %}
+{% endif %}
+{% if resource.personinimage is not empty %}
+{% for personinimage in resource.personinimage|split(',') %}
+    <Trefwoord>{{ personinimage }}​​</Trefwoord>
+{% endfor %}
+{% endif %}
+{% if resource.category is not empty %}
+{% for category in resource.category|split(',') %}
+    <Trefwoord>{{ category }}​​</Trefwoord>
+{% endfor %}
+{% endif %}
+  </dc_subjects>
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
 {% if resource.license is not empty %}
-    <licentie>{{ attribute(conversion_table.license, resource.license) }}</licentie>
+<!--    <licentie>{{ attribute(conversion_table.license, resource.license) }}</licentie> -->
 {% endif %}
   </dc_rights_licenses>
 <!-- Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
   <dc_rights_rightsOwners type="list">
 {% if resource.copyrightowner is not empty %}
 {% for copyrightowner in resource.copyrightowner|split(',') %}
-  <dc_auteursrechthouder>{{ copyrightowner }}</dc_auteursrechthouder>
+  <Auteursrechthouder>{{ copyrightowner }}</Auteursrechthouder>
 {% endfor %}
 {% endif %}
 {% if resource.artworkcopyrightowner is not empty %}
 {% for artworkcopyrightowner in resource.artworkcopyrightowner|split(',') %}
-  <dc_auteursrechthouder>{{ artworkcopyrightowner }}</dc_auteursrechthouder>
+  <Auteursrechthouder>{{ artworkcopyrightowner }}</Auteursrechthouder>
 {% endfor %}
 {% endif %}
 {% if resource.licensor is not empty %}
 {% for licensor in resource.licensor|split(',') %}
-  <dc_licentiehouder>{{ licensor }}</dc_licentiehouder>
+  <Auteursrechthouder>{{ licensor }}</Auteursrechthouder>
 {% endfor %}
 {% endif %}
   </dc_rights_rightsOwners>
-<!-- Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
-  <dc_subjects type="list">
-{% if resource.keywords is not empty %}
-{% for keyword in resource.keywords|split(',') %}
-   <Trefwoord>{{ keyword }}​​</Trefwoord>
-{% endfor %}
-{% endif %}
-{% if resource.personinimage is not empty %}
-{% for personinimage in resource.personinimage|split(',') %}
-   <Trefwoord>{{ personinimage }}​​</Trefwoord>
-{% endfor %}
-{% endif %}
-{% if resource.category is not empty %}
-{% for category in resource.category|split(',') %}
-   <Trefwoord>{{ category }}​​</Trefwoord>
-{% endfor %}
-{% endif %}
-  </dc_subjects>
 <!-- Description met fallback voor TMS-description -->
 {% if resource.publisher == 'MOMU' and resource.tmsdescription is not empty %}
   <dc_description>{{ resource.tmsdescription }}</dc_description>
@@ -102,10 +104,10 @@
 {% if description is not empty %}
   <dc_description_lang>{{ description }}</dc_description_lang>
 {% endif %}
-{% if resource.copyrightnotice is not empty %}
-  <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
-{% endif %}
 {% if resource.credit is not empty %}
   <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
+{% endif %}
+{% if resource.copyrightnotice is not empty %}
+  <dc_rights_comment>{{ resource.copyrightnotice }}</dc_rights_comment>
 {% endif %}
 </VIAA>

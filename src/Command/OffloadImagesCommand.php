@@ -3,6 +3,9 @@ namespace App\Command;
 
 use App\ResourceSpace\ResourceSpace;
 use App\Util\FtpUtil;
+use App\Util\XMLValidator;
+use DOMDocument;
+use Exception;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -44,13 +47,22 @@ class OffloadImagesCommand extends Command
             $lastOffloadTimestamp = fgets($file);
             fclose($file);
         }
-        $outputDir = $params->get('output_dir');
-        if (!is_dir($outputDir)) {
-            mkdir($outputDir);
+        $outputFolder = $params->get('output_folder');
+        if (!is_dir($outputFolder)) {
+            mkdir($outputFolder);
         }
 
         $templateFolder = $params->get('template_folder');
-        $templateFile = $params->get('template_file');
+        $templateFile = $templateFolder . '/' . $params->get('template_file');
+        if (!file_exists($templateFile)) {
+            die('Metadata template is missing, please configure the location of your template in connector.yml and make sure it exists.');
+        }
+
+        $templateXsdSchemaFile = $templateFolder . '/' . $params->get('template_xsd_schema_file');
+        if (!file_exists($templateXsdSchemaFile)) {
+            die('XSD schema is missing, please configure the location of your xsd schema in connector.yml and make sure it exists.');
+        }
+
         $supportedExtensions = $params->get('supported_extensions');
         $collections = $params->get('collections');
         $offloadStatus = $params->get('offload_status');
@@ -98,16 +110,12 @@ class OffloadImagesCommand extends Command
                                 $fileModifiedTimestamp = strtotime($fileModifiedDate);
                             }
                             if ($fileModifiedTimestamp > $lastOffloadTimestamp) {
-                                $localFilename = $outputDir . '/' . $uniqueFilename . '.' . $extension;
+                                $localFilename = $outputFolder . '/' . $uniqueFilename . '.' . $extension;
                                 $resourceUrl = $resourceSpace->getResourceUrl($resourceId);
                                 copy($resourceUrl, $localFilename);
                                 $md5 = md5_file($localFilename);
 
                                 $fileModified = true;
-
-                                echo 'Resource file ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
-                            } else {
-                                echo 'Resource file ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will NOT be offloaded' . PHP_EOL;
                             }
                         }
 
@@ -129,7 +137,7 @@ class OffloadImagesCommand extends Command
                             }
                             if ($updateMetadata) {
                                 if ($metadataTemplate == null) {
-                                    $loader = new FilesystemLoader($templateFolder);
+                                    $loader = new FilesystemLoader('./');
                                     $twig = new Environment($loader);
                                     $metadataTemplate = $twig->load($templateFile);
                                 }
@@ -141,37 +149,53 @@ class OffloadImagesCommand extends Command
                                     'md5_hash' => $md5,
                                     'conversion_table' => $conversionTable
                                 ));
-
-                                $xmlFile = $outputDir . '/' . $uniqueFilename . '.xml';
+                                $xmlFile = $outputFolder . '/' . $uniqueFilename . '.xml';
                                 file_put_contents($xmlFile, $xmlData);
 
-                                if($doOffload) {
-                                    //Upload the image file and delete locally, but only if the file has been modified since the last offload
-                                    if($fileModified && $localFilename != null) {
-                                        $ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename . '.' . $extension);
-                                        unlink($localFilename);
+                                $validated = false;
+                                try {
+                                    $domDoc = new DOMDocument();
+                                    $domDoc->loadXML($xmlData, LIBXML_NOBLANKS);
+                                    if ($domDoc->schemaValidate($templateXsdSchemaFile)) {
+                                        $validated = true;
                                     }
-
-                                    //Upload the XML file and delete locally
-                                    $ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilename . '.xml');
-                                    unlink($xmlFile);
-                                    $resourceSpace->updateField($resourceId, $offloadStatus['key'], $offloadValues['offload_pending']);
-                                    if($fileModified) {
-                                        $updatemd5 = false;
-                                        if(!array_key_exists('md5checksum', $data)) {
-                                            $updatemd5 = true;
-                                        } else if($data['md5checksum'] != $md5) {
-                                            $updatemd5 = true;
-                                        }
-                                        if($updatemd5) {
-                                            $resourceSpace->updateField($resourceId, 'md5checksum', $md5);
-                                        }
-                                    }
+                                } catch(Exception $e) {
+                                    echo 'XML file ' . $xmlFile . ' is not valid:' . PHP_EOL . $e->getMessage() . PHP_EOL;
                                 }
+                                if($validated) {
+                                    if ($doOffload) {
+                                        //Upload the image file and delete locally, but only if the file has been modified since the last offload
+                                        if ($fileModified && $localFilename != null) {
+                                            $ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename . '.' . $extension);
+                                            unlink($localFilename);
+                                        }
 
-                                echo 'Resource metadata ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
+                                        //Upload the XML file and delete locally
+                                        $ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilename . '.xml');
+                                        unlink($xmlFile);
+                                        $resourceSpace->updateField($resourceId, $offloadStatus['key'], $offloadValues['offload_pending']);
+                                        if ($fileModified) {
+                                            $updatemd5 = false;
+                                            if (!array_key_exists('md5checksum', $data)) {
+                                                $updatemd5 = true;
+                                            } else if ($data['md5checksum'] != $md5) {
+                                                $updatemd5 = true;
+                                            }
+                                            if ($updatemd5) {
+                                                $resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+                                            }
+                                        }
+                                    }
+
+                                    if($fileModified) {
+                                        echo 'Resource file ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
+                                    } else {
+                                        echo 'Resource file ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will NOT be offloaded' . PHP_EOL;
+                                    }
+                                    echo 'Metadata ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
+                                }
                             } else {
-                                echo 'Resource metadata ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will NOT be offloaded' . PHP_EOL;
+                                echo 'Resource & metadata ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will NOT be offloaded' . PHP_EOL;
                             }
                         }
                         echo PHP_EOL;
