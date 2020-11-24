@@ -151,6 +151,17 @@ class OffloadImagesCommand extends Command
                                     $ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilename . '.xml');
                                     unlink($xmlFile);
                                     $resourceSpace->updateField($resourceId, $offloadStatus['key'], $offloadValues['offload_pending']);
+                                    if($fileModified) {
+                                        $updatemd5 = false;
+                                        if(!array_key_exists('md5checksum', $data)) {
+                                            $updatemd5 = true;
+                                        } else if($data['md5checksum'] != $md5) {
+                                            $updatemd5 = true;
+                                        }
+                                        if($updatemd5) {
+                                            $resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+                                        }
+                                    }
                                 }
 
                                 echo 'Resource metadata ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
