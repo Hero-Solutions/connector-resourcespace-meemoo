@@ -1,95 +1,111 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <VIAA>
 
-<!-- this is a sample of a comment -->
+<!-- LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML. ALSOOK AANPASSINGEN BIJ XXXXXXXXXX -->
 
   <CP>{{ resource.publisher }}</CP>
   <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
-  <Original_CP>{{ attribute(conversion_table.original_cp, resource.publisher) }}</Original_CP>
+<!-- XXXXXXXXXX Placeholder voor bestandsnaam moet nog worden aangeleverd door Hero Solutions -->
   <dc_source>{{ resource.originalfilename }}</dc_source>
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
   <dc_identifier_localids type="list">
-    <Bestandsnaam>{{ filename }}</Bestandsnaam>
+<!-- XXXXXXXXXX Ik heb deze tag gevonden in handleiding. Vermoedelijk correct al moeten we toch nog eens nagaan wat ze net verwachten van die IDs -->
+{% if resource.inventorynumber is not empty %}
+    <Object_number>{{ resource.inventorynumber }}</Object_number>
+{% endif %}
   </dc_identifier_localids>
   <md5>{{ md5_hash }}</md5>
   <dc_title>{{ resource.title }}</dc_title>
   <dc_titles type="list">
-    <archief></archief>
-    <deelarchief></deelarchief>
-    <reeks></reeks>
-    <deelreeks></deelreeks>
-    <serie></serie>
-    <serienummer></serienummer>
-    <seizoen></seizoen>
-    <seizoennummer></seizoennummer>
-    <programma></programma>
-    <alternatief></alternatief>
+    <alternatief>{{ resource.event }}</alternatief>
   </dc_titles>
-  <dcterms_issued></dcterms_issued>
-  <dcterms_created></dcterms_created>
-  <ebu_objectType></ebu_objectType>
   <dc_creators type="list">
-   <Maker></Maker>
-   <Archiefvormer></Archiefvormer>
-   <Performer></Performer>
+{% if resource.artworkcreator is not empty %}
+{% for artworkcreator in resource.artworkcreator|split(',') %}
+  <Maker>{{ artworkcreator }}</Maker>
+{% endfor %}
+{% endif %}
   </dc_creators>
   <dc_contributors type="list">
-    <Bijdrager></Bijdrager>
-    <Geluidsman></Geluidsman>
+<!-- XXXXXXXXXX Digitalcreator is fictief en moeten worden aangepast in overleg met meemoo. Bijdrager komt uit handleiding en lijkt correct -->
+{% if resource.creator is not empty %}
+{% for creator in resource.creator|split(',') %}
+    <Digitalcreator>{{ resource.creator }}</Digitalcreator>
+{% endfor %}
+{% endif %}
+{% if resource.contributor is not empty %}
+{% for contributor in resource.contributor|split(',') %}
+    <Bijdrager>{{ resource.contributor }}</Bijdrager>
+{% endfor %}
+{% endif %}
   </dc_contributors>
-  <dc_publishers type="list">
-   <Publisher>{{ resource.publisher }}</Publisher>
-   <Distributeur></Distributeur>
-   <Persagentschap></Persagentschap>
-  </dc_publishers>
-  <dc_description>{{ resource.description }}</dc_description>
-  <dc_description_lang></dc_description_lang>
-  <dc_description_programme></dc_description_programme>
-  <dc_description_cast></dc_description_cast>
-  <dc_description_ondertitels></dc_description_ondertitels>
-  <dc_description_transcriptie></dc_description_transcriptie>
-  <dc_description_categorie></dc_description_categorie>
-  <dc_types type="list">
-    <multiselect></multiselect>
-  </dc_types>
-  <dc_coverages type="list">
-    <ruimte></ruimte>
-    <tijd></tijd>
-  </dc_coverages>
-  <test>resource.keywords</test>
-  <dc_subjects type="list">
-{% for subject in resource.keywords|split(',') %}
-   <Trefwoord>{{ subject }}</Trefwoord>
-{% endfor %}
-  </dc_subjects>
-{% if languages is not empty %}
-  <dc_languages type="list">
-{% for language in languages %}
-    <multiselect>{{ language }}</multiselect>
-{% endfor %}
-  </dc_languages>
+<!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
+  <dc_rights_licenses type=”list”>
+{% if resource.license is not empty %}
+    <licentie>{{ attribute(conversion_table.license, resource.license) }}</licentie>
 {% endif %}
-{% if rights_licenses is not empty %}
-  <dc_rights_licenses type="list">
-{% for rights_license in rights_licenses %}
-    <multiselect>{{ rights_license }}</multiselect>
-{% endfor %}
-  </dc_rights_licenses>
-{% endif %}
-{% if rights_owners is not empty %}
+  </dc_rights_licences>
+<!-- Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
   <dc_rights_rightsOwners type="list">
-{% for rights_owner in rights_owners %}
-    <Auteursrechthouder>{{ rights_owner }}</Auteursrechthouder>
+{% if resource.copyrightowner is not empty %}
+{% for copyrightowner in resource.copyrightowner|split(',') %}
+  <dc_auteursrechthouder>{{ copyrightowner }}</dc_auteursrechthouder>
 {% endfor %}
+{% endif %}
+{% if resource.artworkcopyrightowner is not empty %}
+{% for artworkcopyrightowner in resource.artworkcopyrightowner|split(',') %}
+  <dc_auteursrechthouder>{{ artworkcopyrightowner }}</dc_auteursrechthouder>
+{% endfor %}
+{% endif %}
+{% if resource.licensor is not empty %}
+{% for licensor in resource.licensor|split(',') %}
+  <dc_licentiehouder>{{ licensor }}</dc_licentiehouder>
+{% endfor %}
+{% endif %}
   </dc_rights_rightsOwners>
-{% endif %}
-{% if rights_holders is not empty %}
-  <dc_rights_rightsHolders type="list">
-{% for rights_owner in rights_owners %}
-    <Licentiehouder>{{ rights_owner }}</Licentiehouder>
+<!-- Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
+  <dc_subjects type="list">
+{% if resource.keywords is not empty %}
+{% for keyword in resource.keywords|split(',') %}
+   <Trefwoord>{{ keyword }}​​</Trefwoord>
 {% endfor %}
-  </dc_rights_rightsHolders>
 {% endif %}
-  <dc_rights_credit>{{ rights_credit }}</dc_rights_credit>
-  <dc_rights_comment>{{ rights_comment }}</dc_rights_comment>
+{% if resource.personinimage is not empty %}
+{% for personinimage in resource.personinimage|split(',') %}
+   <Trefwoord>{{ personinimage }}​​</Trefwoord>
+{% endfor %}
+{% endif %}
+{% if resource.category is not empty %}
+{% for category in resource.category|split(',') %}
+   <Trefwoord>{{ category }}​​</Trefwoord>
+{% endfor %}
+{% endif %}
+  </dc_subjects>
+<!-- Description met fallback voor TMS-description -->
+{% if resource.publisher == 'MOMU' and resource.tmsdescription is not empty %}
+  <dc_description>{{ resource.tmsdescription }}</dc_description>
+{% elseif resource.description is not empty %}
+  <dc_description>{{ resource.description }}</dc_description>
+{% else %}
+  <dc_description>n/a</dc_description>
+{% endif %}
+<!-- Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description -->
+{% if resource.externalnote is not empty %}
+{% if resource.sourcematerialtype is not empty %}
+{% set description = 'External Note: ' ~ resource.externalnote ~ ' - Material Type: ' ~ resource.sourcematerialtype %}
+{% else %}
+{% set description = 'External Note: ' ~ resource.externalnote %}
+{% endif %}
+{% elseif resource.sourcematerialtype is not empty %}
+{% set description = 'Material Type: ' ~ resource.sourcematerialtype %}
+{% endif %}
+{% if description is not empty %}
+  <dc_description_lang>{{ description }}</dc_description_lang>
+{% endif %}
+{% if resource.copyrightnotice is not empty %}
+  <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
+{% endif %}
+{% if resource.credit is not empty %}
+  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
+{% endif %}
 </VIAA>
