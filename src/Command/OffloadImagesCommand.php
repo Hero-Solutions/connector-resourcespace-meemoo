@@ -29,28 +29,33 @@ class OffloadImagesCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $resourceSpace = new ResourceSpace($this->params);
-        $ftpUtil = new FtpUtil($this->params);
+        $this->offloadImages($this->params, true);
+    }
+
+    public static function offloadImages(ParameterBagInterface $params, $doOffload)
+    {
+        $resourceSpace = new ResourceSpace($params);
+        $ftpUtil = new FtpUtil($params);
 
         $lastOffloadTimestamp = 0;
-        $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
+        $lastTimestampFile = $params->get('last_offload_timestamp_file');
         if(file_exists($lastTimestampFile)) {
             $file = fopen($lastTimestampFile, "r") or die("Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
             $lastOffloadTimestamp = fgets($file);
             fclose($file);
         }
-        $outputDir = $this->params->get('output_dir');
+        $outputDir = $params->get('output_dir');
         if (!is_dir($outputDir)) {
             mkdir($outputDir);
         }
 
-        $templateFolder = $this->params->get('template_folder');
-        $templateFile = $this->params->get('template_file');
-        $supportedExtensions = $this->params->get('supported_extensions');
-        $collections = $this->params->get('collections');
-        $offloadStatus = $this->params->get('offload_status');
+        $templateFolder = $params->get('template_folder');
+        $templateFile = $params->get('template_file');
+        $supportedExtensions = $params->get('supported_extensions');
+        $collections = $params->get('collections');
+        $offloadStatus = $params->get('offload_status');
         $offloadValues = $offloadStatus['values'];
-        $conversionTable = $this->params->get('conversion_table');
+        $conversionTable = $params->get('conversion_table');
 
         $collectionKey = $collections['key'];
 
@@ -140,7 +145,7 @@ class OffloadImagesCommand extends Command
                                 $xmlFile = $outputDir . '/' . $uniqueFilename . '.xml';
                                 file_put_contents($xmlFile, $xmlData);
 
-                                if($this->getName() == 'app:offload-images') {
+                                if($doOffload) {
                                     //Upload the image file and delete locally, but only if the file has been modified since the last offload
                                     if($fileModified && $localFilename != null) {
                                         $ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename . '.' . $extension);
@@ -175,7 +180,7 @@ class OffloadImagesCommand extends Command
             }
         }
 
-        if($this->getName() == 'app:offload-images') {
+        if($doOffload) {
             $file = fopen($lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
             fwrite($file, time());
             fclose($file);
