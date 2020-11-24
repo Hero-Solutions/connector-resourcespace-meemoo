@@ -40,11 +40,11 @@
 {% endif %}
   </dc_contributors>
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
-  <dc_rights_licences type="list">
+  <dc_rights_licenses type="list">
 {% if resource.license is not empty %}
     <licentie>{{ attribute(conversion_table.license, resource.license) }}</licentie>
 {% endif %}
-  </dc_rights_licences>
+  </dc_rights_licenses>
 <!-- Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
   <dc_rights_rightsOwners type="list">
 {% if resource.copyrightowner is not empty %}
