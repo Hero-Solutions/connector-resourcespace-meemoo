@@ -40,7 +40,7 @@
 {% endif %}
   </dc_contributors>
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
-  <dc_rights_licenses type="list">
+  <dc_rights_licences type="list">
 {% if resource.license is not empty %}
     <licentie>{{ attribute(conversion_table.license, resource.license) }}</licentie>
 {% endif %}
