@@ -50,9 +50,9 @@ parameters:
 
   conversion_table:
     cp:
-      FOMU: 'FoMu'
+      FOMU: 'FOMU'
       MOMU: 'MoMu'
-      DIVA: 'Museum voor Edelsmeedkunst Juwelen en Diamant'
+      DIVA: 'DIVA, Museum voor Edelsmeedkunst Juwelen en Diamant'
       DEMUSEUMSTICHTING: 'MoMu'
     cp_id:
       FOMU: ''
