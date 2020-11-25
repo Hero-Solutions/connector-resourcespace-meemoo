@@ -16,7 +16,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
-class ProcessOffloadedDataCommand extends Command
+class ProcessOffloadedResourcesCommand extends Command
 {
     private $params;
 
@@ -29,7 +29,7 @@ class ProcessOffloadedDataCommand extends Command
     protected function configure()
     {
         $this
-            ->setName('app:process-offloaded-data')
+            ->setName('app:process-offloaded-resources')
             ->setDescription('Checks the status of the last offloaded images and deletes originals if successful.');
     }
 
