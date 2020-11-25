@@ -3,7 +3,7 @@
 
 <!-- LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML. ALSOOK AANPASSINGEN BIJ XXXXXXXXXX -->
 
-  <CP>{{ resource.publisher }}</CP>
+  <CP>{{ attribute(conversion_table.cp, resource.publisher) }}</CP>
 <!-- XXXXXXXXXX CP_id wordt niet aanvaard door het XSD schema, maar toch staat het in het voorbeeld van meemoo op Github? -->
 <!--  <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id> -->
   <dc_source>{{ filename }}</dc_source>
