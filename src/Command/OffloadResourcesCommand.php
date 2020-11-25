@@ -3,7 +3,6 @@ namespace App\Command;
 
 use App\ResourceSpace\ResourceSpace;
 use App\Util\FtpUtil;
-use App\Util\XMLValidator;
 use DOMDocument;
 use Exception;
 use Symfony\Component\Console\Command\Command;
