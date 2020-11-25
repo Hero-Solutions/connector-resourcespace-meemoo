@@ -47,6 +47,7 @@ parameters:
 
   oai_pmh_api:
     url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
+    resourcespace_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties/dc_identifier_localid'
     credentials:
       DEMUSEUMSTICHTING:
         username: ''

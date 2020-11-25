@@ -65,14 +65,10 @@ class ProcessOffloadedResourcesCommand extends Command
                 $curlAdapter->setCurlOpts($curlOpts);
                 $oaiPmhClient = new Client($oaiPmhApi['url'], $curlAdapter);
                 $oaiPmhEndpoint = new Endpoint($oaiPmhClient);
-                $records = $oaiPmhEndpoint->listRecords('mets', new DateTime($lastOffloadDateTime));
+                $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
-                $i = 0;
                 foreach($records as $record) {
-                    $i++;
-                    echo 'At record ' . $i . PHP_EOL;
-                    $this->processRecord($record, $collection);
-                    //TODO process
+                    $this->processRecord($record, $oaiPmhApi, $collection);
                 }
             }
             catch(OaipmhException $e) {
@@ -90,8 +86,12 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function processRecord($record, $collection)
+    private function processRecord($record, $oaiPmhApi, $collection)
     {
-
+        $results = $record->metadata->children($oaiPmhApi['namespace'], true)->xpath($oaiPmhApi['resourcespace_id_xpath']);
+        foreach($results as $result) {
+            echo $result . PHP_EOL;
+            //TODO process
+        }
     }
 }
