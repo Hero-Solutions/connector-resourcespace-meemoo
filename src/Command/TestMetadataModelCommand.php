@@ -24,7 +24,7 @@ class TestMetadataModelCommand extends Command
     {
         $this
             ->setName('app:test-metadata')
-            ->setDescription('Lists all ResourceSpace resources and offloads all images with the appropriate metadata onto an FTP server.');
+            ->setDescription('Lists all ResourceSpace resources and generates XML metadata files for the appropriate resources (dry run, does not actually offload images).');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
