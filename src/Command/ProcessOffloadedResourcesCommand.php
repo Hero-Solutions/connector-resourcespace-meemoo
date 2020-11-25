@@ -4,6 +4,8 @@
 namespace App\Command;
 
 
+use App\ResourceSpace\ResourceSpace;
+use App\Util\DateTimeUtil;
 use DateTime;
 use Exception;
 use Phpoaipmh\Client;
@@ -19,6 +21,9 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 class ProcessOffloadedResourcesCommand extends Command
 {
     private $params;
+    private $resourceSpace;
+    private $offloadStatusField;
+    private $resourceSpaceMetadataFields;
 
     public function __construct(ParameterBagInterface $params)
     {
@@ -44,7 +49,10 @@ class ProcessOffloadedResourcesCommand extends Command
             die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastTimestampFile . "').");
         }
 
-        $lastOffloadDateTime = gmdate("Y-m-d\TH:i:s\Z", $lastOffloadTimestamp);
+        $this->offloadStatusField = $this->params->get('offload_status_field');
+        $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
+
+        $lastOffloadDateTime = DateTimeUtil::formatTimestamp($lastOffloadTimestamp);
 
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
@@ -68,7 +76,7 @@ class ProcessOffloadedResourcesCommand extends Command
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {
-                    $this->processRecord($record, $oaiPmhApi, $collection);
+                    $this->processRecord($record->metadata->children($oaiPmhApi['namespace'], true), $oaiPmhApi['resourcespace_id_xpath'], $oaiPmhApi['meemoo_image_url_xpath'], $collection);
                 }
             }
             catch(OaipmhException $e) {
@@ -86,12 +94,50 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function processRecord($record, $oaiPmhApi, $collection)
+    private function processRecord($record, $resourceIdXpath, $meemooImageUrlXpath, $collection)
     {
-        $results = $record->metadata->children($oaiPmhApi['namespace'], true)->xpath($oaiPmhApi['resourcespace_id_xpath']);
-        foreach($results as $result) {
-            echo $result . PHP_EOL;
-            //TODO process
+        $resourceIds = $record->xpath($resourceIdXpath);
+        foreach($resourceIds as $resourceId) {
+            echo $resourceId . PHP_EOL;
+
+            $imageUrl = null;
+            $imageUrls = $record->xpath($meemooImageUrlXpath);
+            foreach($imageUrls as $url) {
+                $imageUrl = $url;
+            }
+            echo $imageUrl . PHP_EOL;
+
+            if($this->resourceSpace == null) {
+                $this->resourceSpace = new ResourceSpace($this->params);
+            }
+
+            $rawResourceData = $this->resourceSpace->getRawResourceFieldData($resourceId);
+            if($rawResourceData == null) {
+                echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!';
+            } else {
+                $resourceData = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
+
+                $key = $this->offloadStatusField['key'];
+                $offloadedValue = $this->offloadStatusField['values']['offloaded'];
+                $offloadPendingvalue = $this->offloadStatusField['values']['offload_pending'];
+
+                //TODO process
+                //TODO what about resources that have 'Pending' offload status but used to be marked with 'Offload but keep original'? How do we know we wanted to keep the original?
+
+                $syncTimestampField = $this->resourceSpaceMetadataFields['sync_timestamp'];
+                if(!empty($syncTimestampField)) {
+                    $this->resourceSpace->updateField($resourceId, $syncTimestampField, DateTimeUtil::formatTimestamp());
+                }
+
+                if($imageUrl != null) {
+                    if(!empty($imageUrl)) {
+                        $meemooImageUrlField = $this->resourceSpaceMetadataFields['meemoo_image_url'];
+                        if(!empty($meemooImageUrlField)) {
+                            $this->resourceSpace->updateField($resourceId, $meemooImageUrlField, $imageUrl);
+                        }
+                    }
+                }
+            }
         }
     }
 }

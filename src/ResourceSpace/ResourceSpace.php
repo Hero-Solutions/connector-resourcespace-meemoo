@@ -34,14 +34,15 @@ class ResourceSpace
 
     public function getResourceDataIfFieldContains($ref, $fieldName, $filter)
     {
-        $resourceData = $this->getResourceInfo($ref);
+        $rawResourceData = $this->getRawResourceFieldData($ref);
         $isValid = false;
-        if($resourceData != null) {
-            if(!empty($resourceData)) {
-                foreach($resourceData as $field) {
+        if($rawResourceData != null) {
+            if(!empty($rawResourceData)) {
+                foreach($rawResourceData as $field) {
                     if($field['name'] == $fieldName) {
                         if(in_array($field['value'], $filter)) {
                             $isValid = true;
+                            break;
                         } else {
                             $isValid = false;
                             break;
@@ -50,13 +51,22 @@ class ResourceSpace
                 }
             }
         }
-        return $isValid ? $resourceData : null;
+        return $isValid ? $this->getResourceFieldDataAsAssocArray($rawResourceData) : null;
     }
 
-    private function getResourceInfo($id)
+    public function getRawResourceFieldData($id)
     {
         $data = $this->doApiCall('get_resource_field_data&param1=' . $id);
         return json_decode($data, true);
+    }
+
+    public function getResourceFieldDataAsAssocArray($data)
+    {
+        $result = array();
+        foreach ($data as $field) {
+            $result[$field['name']] = $field['value'];
+        }
+        return $result;
     }
 
     public function getResourceUrl($id)

@@ -48,18 +48,25 @@ parameters:
   oai_pmh_api:
     url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
     resourcespace_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties/dc_identifier_localid'
+    meemoo_image_url_xpath: 'mets:fileSec/mets:fileGrp/mets:file/@xlink:href'
     credentials:
       DEMUSEUMSTICHTING:
         username: ''
         password: ''
 
-  offload_status:
+  offload_status_field:
     key: 'offloadstatus'
     values:
       offload: 'Ready for offload'
       offload_but_keep_original: 'Offload but keep original'
       offloaded: 'Offloaded'
       offload_pending: 'Pending'
+
+  # TODO these metadata fields do not yet exist in ResourceSpace at this time
+  resourcespace_metadata_fields:
+    offload_timestamp: ''
+    sync_timestamp: ''
+    meemoo_image_url: ''
 
   conversion_table:
     cp:

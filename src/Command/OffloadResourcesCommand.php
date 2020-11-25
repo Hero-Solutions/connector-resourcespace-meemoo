@@ -2,6 +2,7 @@
 namespace App\Command;
 
 use App\ResourceSpace\ResourceSpace;
+use App\Util\DateTimeUtil;
 use App\Util\FtpUtil;
 use DOMDocument;
 use Exception;
@@ -35,7 +36,8 @@ class OffloadResourcesCommand extends Command
     private $templateXsdSchemaFile;
     private $supportedExtensions;
     private $collections;
-    private $offloadStatus;
+    private $offloadStatusField;
+    private $resourceSpaceMetadataFields;
     private $offloadValues;
     private $conversionTable;
     private $collectionKey;
@@ -98,8 +100,9 @@ class OffloadResourcesCommand extends Command
 
         $this->supportedExtensions = $this->params->get('supported_extensions');
         $this->collections = $this->params->get('collections');
-        $this->offloadStatus = $this->params->get('offload_status');
-        $this->offloadValues = $this->offloadStatus['values'];
+        $this->offloadStatusField = $this->params->get('offload_status_field');
+        $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
+        $this->offloadValues = $this->offloadStatusField['values'];
         $this->conversionTable = $this->params->get('conversion_table');
 
         $this->collectionKey = $this->collections['key'];
@@ -117,14 +120,10 @@ class OffloadResourcesCommand extends Command
                 $resourceId = $resource['ref'];
 
                 // Get this resource's metadata if it has an appropriate offloadStatus
-                $resourceData = $this->resourceSpace->getResourceDataIfFieldContains($resourceId, $this->offloadStatus['key'], $this->offloadStatusFilter);
+                $resourceData = $this->resourceSpace->getResourceDataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
                 if($resourceData != null) {
-                    $data = array();
-                    foreach ($resourceData as $field) {
-                        $data[$field['name']] = $field['value'];
-                    }
-                    if($this->hassupportedExtension($resourceId, $data, $this->supportedExtensions)) {
-                        $this->processResource($resourceId, $resource, $data, $collection);
+                    if($this->hassupportedExtension($resourceId, $resourceData, $this->supportedExtensions)) {
+                        $this->processResource($resourceId, $resource, $resourceData, $collection);
                     }
                 }
             }
@@ -157,10 +156,10 @@ class OffloadResourcesCommand extends Command
         $uniqueFilenameWithoutExtension = $resourceId . '_' . pathinfo($data['originalfilename'], PATHINFO_FILENAME);
 
         $md5 = null;
-        $fileModified = false;
+        $offloadFile = false;
         $localFilename = null;
 
-        //Check when the file was last modified
+        // Check when the file was last modified
         if (array_key_exists('file_modified', $resource)) {
             $fileModifiedDate = $resource['file_modified'];
             $fileModifiedTimestamp = 0;
@@ -173,34 +172,34 @@ class OffloadResourcesCommand extends Command
                 copy($resourceUrl, $localFilename);
                 $md5 = md5_file($localFilename);
 
-                $fileModified = true;
+                $offloadFile = true;
             }
         }
 
-        $updateMetadata = false;
-        if ($fileModified) {
-            //Always update the metadata if the file was modified
-            $updateMetadata = true;
+        $offloadMetadata = false;
+        if ($offloadFile) {
+            // Always update the metadata if the file was modified
+            $offloadMetadata = true;
         } else {
             $md5 = $data['md5checksum'];
         }
 
-        if ($updateMetadata || array_key_exists('modified', $resource)) {
+        if ($offloadMetadata || array_key_exists('modified', $resource)) {
             $metadataModifiedDate = $resource['modified'];
-            if (!$updateMetadata) {
+            if (!$offloadMetadata) {
                 if (strlen($metadataModifiedDate) > 0) {
-                    //Update metadata if the metadata has been modified since the last offload
-                    $updateMetadata = strtotime($metadataModifiedDate) > $this->lastOffloadTimestamp;
+                    // Offload metadata if the metadata has been modified since the last offload
+                    $offloadMetadata = strtotime($metadataModifiedDate) > $this->lastOffloadTimestamp;
                 }
             }
-            if ($updateMetadata) {
+            if ($offloadMetadata) {
                 $xmlFile = $this->generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection, $md5);
                 if($xmlFile != null) {
                     if (!$this->dryRun) {
-                        $this->offloadResource($resourceId, $data, $md5, $xmlFile, $fileModified, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
+                        $this->offloadResource($resourceId, $data, $md5, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
                     }
 
-                    if ($fileModified) {
+                    if ($offloadFile) {
                         echo 'Resource file ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will be offloaded' . PHP_EOL;
                     } else {
                         echo 'Resource file ' . $data['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedDate . ') will NOT be offloaded' . PHP_EOL;
@@ -216,7 +215,7 @@ class OffloadResourcesCommand extends Command
 
     private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection, $md5)
     {
-        //Initialize metadata template
+        // Initialize metadata template
         if ($this->metadataTemplate == null) {
             $loader = new FilesystemLoader('./');
             $twig = new Environment($loader);
@@ -263,20 +262,26 @@ class OffloadResourcesCommand extends Command
 
     private function offloadResource($resourceId, $data, $md5, $xmlFile, $fileModified, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection)
     {
-        //Upload the image file and delete locally, but only if the file has been modified since the last offload
+        // Upload the image file and delete locally, but only if the file has been modified since the last offload
         if ($fileModified && $localFilename != null) {
             $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
             unlink($localFilename);
         }
 
-        //Upload the XML file and delete locally
+        // Upload the XML file and delete locally
         $this->ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilenameWithoutExtension . '.xml');
         unlink($xmlFile);
 
-        //Update ResourceSpace offload status
-        $this->resourceSpace->updateField($resourceId, $this->offloadStatus['key'], $this->offloadValues['offload_pending']);
+        // Update offload status in ResourceSpace
+        $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadValues['offload_pending']);
 
-        //Update ResourceSpace md5checksum if needed
+        // Update offload timestamp in ResourceSpace
+        $offloadTimestampField = $this->resourceSpaceMetadataFields['offload_timestamp'];
+        if(!empty($offloadTimestampField)) {
+            $this->resourceSpace->updateField($resourceId, $offloadTimestampField, DateTimeUtil::formatTimestamp());
+        }
+
+        // Update ResourceSpace md5checksum if needed
         if ($fileModified) {
             $updatemd5 = false;
             if (!array_key_exists('md5checksum', $data)) {
