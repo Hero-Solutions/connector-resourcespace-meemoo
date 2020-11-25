@@ -7,11 +7,11 @@ parameters:
     key: ''
 
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
+  ssl_certificate_authority_file: 'cacert.pem'
 
   output_folder: 'output'
-  template_folder: 'config'
-  template_file: 'meemoo_metadata_template.xml'
-  template_xsd_schema_file: 'viaa_metadatamodel_van_cp_naar_viaa.xsd'
+  template_file: 'config/meemoo_metadata_template.xml'
+  template_xsd_schema_file: 'config/viaa_metadatamodel_van_cp_naar_viaa.xsd'
 
   supported_extensions:
     - png
@@ -19,6 +19,14 @@ parameters:
     - jpeg
     - tif
     - tiff
+
+  collections:
+    key: 'publisher'
+    values:
+      - 'DEMUSEUMSTICHTING'
+#      - 'MOMU'
+#      - 'FOMU'
+#      - 'DIVA'
 
   # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
   # remote_directory MUST have both a leading and trailing slash
@@ -32,13 +40,12 @@ parameters:
         password: ''
         remote_directory: '/sample_dir/'
 
-  collections:
-    key: 'publisher'
-    values:
-      - 'DEMUSEUMSTICHTING'
-#      - 'MOMU'
-#      - 'FOMU'
-#      - 'DIVA'
+  oai_pmh_api:
+    url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
+    credentials:
+      DEMUSEUMSTICHTING:
+        username: ''
+        password: ''
 
   offload_status:
     key: 'offloadstatus'

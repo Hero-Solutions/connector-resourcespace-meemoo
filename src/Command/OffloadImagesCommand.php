@@ -52,13 +52,12 @@ class OffloadImagesCommand extends Command
             mkdir($outputFolder);
         }
 
-        $templateFolder = $params->get('template_folder');
-        $templateFile = $templateFolder . '/' . $params->get('template_file');
+        $templateFile = $params->get('template_file');
         if (!file_exists($templateFile)) {
             die('Metadata template is missing, please configure the location of your template in connector.yml and make sure it exists.');
         }
 
-        $templateXsdSchemaFile = $templateFolder . '/' . $params->get('template_xsd_schema_file');
+        $templateXsdSchemaFile = $params->get('template_xsd_schema_file');
         if (!file_exists($templateXsdSchemaFile)) {
             die('XSD schema is missing, please configure the location of your xsd schema in connector.yml and make sure it exists.');
         }
