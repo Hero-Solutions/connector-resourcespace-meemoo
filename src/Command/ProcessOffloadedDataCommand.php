@@ -47,6 +47,7 @@ class ProcessOffloadedDataCommand extends Command
 
         $lastOffloadDateTime = gmdate("Y-m-d\TH:i:s\Z", $lastOffloadTimestamp);
 
+        $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
         $collections = $this->params->get('collections')['values'];
         $oaiPmhApi = $this->params->get('oai_pmh_api');
@@ -54,12 +55,15 @@ class ProcessOffloadedDataCommand extends Command
         foreach($collections as $collection) {
             try {
                 $curlAdapter = new CurlAdapter();
-                $curlAdapter->setCurlOpts(array(
+                $curlOpts = array(
                     CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
-                    CURLOPT_USERPWD => $oaiPmhApi['credentials'][$collection]['username'] . ':' . $oaiPmhApi['credentials'][$collection]['password'],
-                    CURLOPT_CAINFO => $sslCertificateAuthorityFile,
-                    CURLOPT_CAPATH => $sslCertificateAuthorityFile
-                ));
+                    CURLOPT_USERPWD => $oaiPmhApi['credentials'][$collection]['username'] . ':' . $oaiPmhApi['credentials'][$collection]['password']
+                );
+                if($overrideCertificateAuthorityFile) {
+                    $curlOpts[CURLOPT_CAINFO] = $sslCertificateAuthorityFile;
+                    $curlOpts[CURLOPT_CAPATH] = $sslCertificateAuthorityFile;
+                }
+                $curlAdapter->setCurlOpts($curlOpts);
                 $oaiPmhClient = new Client($oaiPmhApi['url'], $curlAdapter);
                 $oaiPmhEndpoint = new Endpoint($oaiPmhClient);
                 $records = $oaiPmhEndpoint->listRecords('mets', new DateTime($lastOffloadDateTime));
