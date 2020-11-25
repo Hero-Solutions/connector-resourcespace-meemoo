@@ -103,10 +103,10 @@
 {% if description is not empty %}
   <dc_description_lang>{{ description }}</dc_description_lang>
 {% endif %}
-{% if resource.credit is not empty %}
-  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
-{% endif %}
 {% if resource.copyrightnotice is not empty %}
-  <dc_rights_comment>{{ resource.copyrightnotice }}</dc_rights_comment>
+  <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
 {% endif %}
+  {% if resource.credit is not empty %}
+  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
+  {% endif %}
 </VIAA>
