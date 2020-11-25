@@ -16,7 +16,7 @@ use Twig\Error\RuntimeError;
 use Twig\Error\SyntaxError;
 use Twig\Loader\FilesystemLoader;
 
-class OffloadImagesCommand extends Command
+class OffloadResourcesCommand extends Command
 {
     private $params;
     private $dryRun;
