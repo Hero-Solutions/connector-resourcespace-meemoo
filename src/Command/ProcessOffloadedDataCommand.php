@@ -35,7 +35,6 @@ class ProcessOffloadedDataCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $lastOffloadTimestamp = 0;
         $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
         if(file_exists($lastTimestampFile)) {
             $file = fopen($lastTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
@@ -72,7 +71,8 @@ class ProcessOffloadedDataCommand extends Command
                 foreach($records as $record) {
                     $i++;
                     echo 'At record ' . $i . PHP_EOL;
-
+                    $this->processRecord($record, $collection);
+                    //TODO process
                 }
             }
             catch(OaipmhException $e) {
@@ -88,5 +88,10 @@ class ProcessOffloadedDataCommand extends Command
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
+    }
+
+    private function processRecord($record, $collection)
+    {
+
     }
 }

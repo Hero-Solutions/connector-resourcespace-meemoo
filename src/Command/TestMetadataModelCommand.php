@@ -29,6 +29,7 @@ class TestMetadataModelCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        OffloadImagesCommand::offloadImages($this->params, false);
+        $cmd = new OffloadImagesCommand($this->params, true);
+        $cmd->offloadImages();
     }
 }
