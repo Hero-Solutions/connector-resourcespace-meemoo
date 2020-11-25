@@ -4,8 +4,67 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "cfd940ec3a5df657cb4efc3fedd77e0d",
+    "content-hash": "cbd54ea54986383cc8d4675637628bed",
     "packages": [
+        {
+            "name": "caseyamcl/phpoaipmh",
+            "version": "v3.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/caseyamcl/phpoaipmh.git",
+                "reference": "1c1d25373e9283fbd0f90cf48ff7fead8b82c646"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/caseyamcl/phpoaipmh/zipball/1c1d25373e9283fbd0f90cf48ff7fead8b82c646",
+                "reference": "1c1d25373e9283fbd0f90cf48ff7fead8b82c646",
+                "shasum": ""
+            },
+            "require": {
+                "ext-simplexml": "*",
+                "php": ">=5.5.0"
+            },
+            "require-dev": {
+                "guzzlehttp/guzzle": "^6.0|^7.0",
+                "mockery/mockery": "^0.9",
+                "phpunit/phpunit": "^4.0|^5.0",
+                "squizlabs/php_codesniffer": "^3.5",
+                "symfony/config": "^3.4|^4.3|^5.0",
+                "symfony/console": "^3.4|^4.3|^5.0",
+                "symfony/dependency-injection": "^3.4.26|^4.3|^5.0",
+                "symfony/yaml": "^3.4|^4.3|^5.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Phpoaipmh\\": [
+                        "src/",
+                        "tests"
+                    ],
+                    "Phpoaipmh\\Example\\": "example/src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Casey McLaughlin",
+                    "email": "caseyamcl@gmail.com",
+                    "homepage": "http://caseymclaughlin.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "A PHP OAI-PMH 2.0 Harvester library",
+            "homepage": "https://github.com/caseyamcl/phpoaipmh",
+            "keywords": [
+                "Harvester",
+                "OAI",
+                "OAI-PMH"
+            ],
+            "time": "2020-09-13T16:14:45+00:00"
+        },
         {
             "name": "psr/cache",
             "version": "1.0.1",

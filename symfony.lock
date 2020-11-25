@@ -1,4 +1,7 @@
 {
+    "caseyamcl/phpoaipmh": {
+        "version": "v3.2"
+    },
     "php": {
         "version": "7.4"
     },
