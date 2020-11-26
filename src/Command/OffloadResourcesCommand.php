@@ -187,6 +187,7 @@ class OffloadResourcesCommand extends Command
         if ($offloadMetadata || array_key_exists('modified', $resource)) {
             $metadataModifiedDate = $resource['modified'];
             if (!$offloadMetadata) {
+                //TODO prevent endless uploading of XML because the 'offload status' or 'offload timestamp' fields were changed, which will happen on every offload
                 if (strlen($metadataModifiedDate) > 0) {
                     // Offload metadata if the metadata has been modified since the last offload
                     $offloadMetadata = strtotime($metadataModifiedDate) > $this->lastOffloadTimestamp;

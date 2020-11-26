@@ -58,6 +58,27 @@
 {% endfor %}
 {% endif %}
   </dc_subjects>
+<!-- Description met fallback voor TMS-description -->
+{% if resource.publisher == 'MOMU' and resource.tmsdescription is not empty %}
+  <dc_description>{{ resource.tmsdescription }}</dc_description>
+{% elseif resource.description is not empty %}
+  <dc_description>{{ resource.description }}</dc_description>
+{% else %}
+  <dc_description>n/a</dc_description>
+{% endif %}
+<!-- Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description -->
+{% if resource.externalnote is not empty %}
+{% if resource.sourcematerialtype is not empty %}
+{% set description = 'External Note: ' ~ resource.externalnote ~ ' - Material Type: ' ~ resource.sourcematerialtype %}
+{% else %}
+{% set description = 'External Note: ' ~ resource.externalnote %}
+{% endif %}
+{% elseif resource.sourcematerialtype is not empty %}
+{% set description = 'Material Type: ' ~ resource.sourcematerialtype %}
+{% endif %}
+{% if description is not empty %}
+  <dc_description_lang>{{ description }}</dc_description_lang>
+{% endif %}
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
 {% if resource.license is not empty %}
@@ -82,31 +103,10 @@
 {% endfor %}
 {% endif %}
   </dc_rights_rightsOwners>
-<!-- Description met fallback voor TMS-description -->
-{% if resource.publisher == 'MOMU' and resource.tmsdescription is not empty %}
-  <dc_description>{{ resource.tmsdescription }}</dc_description>
-{% elseif resource.description is not empty %}
-  <dc_description>{{ resource.description }}</dc_description>
-{% else %}
-  <dc_description>n/a</dc_description>
-{% endif %}
-<!-- Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description -->
-{% if resource.externalnote is not empty %}
-{% if resource.sourcematerialtype is not empty %}
-{% set description = 'External Note: ' ~ resource.externalnote ~ ' - Material Type: ' ~ resource.sourcematerialtype %}
-{% else %}
-{% set description = 'External Note: ' ~ resource.externalnote %}
-{% endif %}
-{% elseif resource.sourcematerialtype is not empty %}
-{% set description = 'Material Type: ' ~ resource.sourcematerialtype %}
-{% endif %}
-{% if description is not empty %}
-  <dc_description_lang>{{ description }}</dc_description_lang>
-{% endif %}
 {% if resource.copyrightnotice is not empty %}
   <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
 {% endif %}
-  {% if resource.credit is not empty %}
+{% if resource.credit is not empty %}
   <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
-  {% endif %}
+{% endif %}
 </VIAA>
