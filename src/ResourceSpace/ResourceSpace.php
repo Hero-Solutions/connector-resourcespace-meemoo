@@ -32,13 +32,13 @@ class ResourceSpace
         return $resources;
     }
 
-    public function getResourceDataIfFieldContains($ref, $fieldName, $filter)
+    public function getResourceMetadataIfFieldContains($ref, $fieldName, $filter)
     {
-        $rawResourceData = $this->getRawResourceFieldData($ref);
+        $rawResourceMetadata = $this->getRawResourceFieldData($ref);
         $isValid = false;
-        if($rawResourceData != null) {
-            if(!empty($rawResourceData)) {
-                foreach($rawResourceData as $field) {
+        if($rawResourceMetadata != null) {
+            if(!empty($rawResourceMetadata)) {
+                foreach($rawResourceMetadata as $field) {
                     if($field['name'] == $fieldName) {
                         if(in_array($field['value'], $filter)) {
                             $isValid = true;
@@ -51,7 +51,7 @@ class ResourceSpace
                 }
             }
         }
-        return $isValid ? $this->getResourceFieldDataAsAssocArray($rawResourceData) : null;
+        return $isValid ? $this->getResourceFieldDataAsAssocArray($rawResourceMetadata) : null;
     }
 
     public function getRawResourceFieldData($id)

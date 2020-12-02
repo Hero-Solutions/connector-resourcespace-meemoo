@@ -59,14 +59,15 @@ parameters:
     values:
       offload: 'Ready for offload'
       offload_but_keep_original: 'Offload but keep original'
-      offloaded: 'Offloaded'
       offload_pending: 'Pending'
+      offload_pending_but_keep_original: 'Pending but keep original'
+      offloaded: 'Offloaded'
+      offloaded_but_keep_original: 'Offloaded but keep original'
 
-  # TODO these metadata fields do not yet exist in ResourceSpace at this time
   resourcespace_metadata_fields:
-    offload_timestamp: ''
-    sync_timestamp: ''
-    meemoo_image_url: ''
+    offload_timestamp_resource: 'offloadtime'
+    offload_timestamp_metadata: 'offloadtimemeta'
+    meemoo_image_url: 'linkoriginal'
 
   conversion_table:
     cp:

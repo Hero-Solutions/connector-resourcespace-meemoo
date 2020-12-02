@@ -18,8 +18,7 @@
   <dc_titles type="list">
     <alternatief>{{ resource.event }}</alternatief>
   </dc_titles>
-<!-- XXXXXXXXXX wat wordt hier exact mee bedoeld? Het is in elk geval een verplicht element -->
-  <dcterms_created>{{ resource.modified}}</dcterms_created>
+  <dcterms_created>{{ creation_date }}</dcterms_created>
   <dc_creators type="list">
 {% if resource.artworkcreator is not empty %}
 {% for artworkcreator in resource.artworkcreator|split(',') %}
