@@ -1,6 +1,13 @@
 ---
 parameters:
 
+  supported_extensions:
+    - png
+    - jpg
+    - jpeg
+    - tif
+    - tiff
+
   resourcespace_api:
     url: ''
     username: ''
@@ -17,13 +24,6 @@ parameters:
   output_folder: 'output'
   template_file: 'config/meemoo_metadata_template.xml'
   template_xsd_schema_file: 'config/viaa_metadatamodel_van_cp_naar_viaa.xsd'
-
-  supported_extensions:
-    - png
-    - jpg
-    - jpeg
-    - tif
-    - tiff
 
   collections:
     key: 'publisher'

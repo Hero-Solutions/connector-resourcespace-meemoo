@@ -35,7 +35,7 @@ class ProcessOffloadedResourcesCommand extends Command
     {
         $this
             ->setName('app:process-offloaded-resources')
-            ->setDescription('Checks the status of the last offloaded images and deletes originals if successful.');
+            ->setDescription('Checks the status of the last offloaded images and deletes originals if successful. NOTE: deleting of originals is not yet supported at this time!');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
@@ -80,18 +80,23 @@ class ProcessOffloadedResourcesCommand extends Command
                 }
             }
             catch(OaipmhException $e) {
-                echo 'OAI-PMH error at collection ' . $collection . ': ' . $e . PHP_EOL;
+                if($e->getOaiErrorCode() == 'noRecordsMatch') {
+                    // No need to do anything, there are simply no records to process.
+                } else {
+                    echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
+                }
             }
             catch(HttpException $e) {
-                echo 'OAI-PMH error at collection ' . $collection . ': ' . $e . PHP_EOL;
+                echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
             catch(Exception $e) {
-                echo 'OAI-PMH error at collection ' . $collection . ': ' . $e . PHP_EOL;
+                echo 'OAI-PMH error (3) at collection ' . $collection . ': ' . $e . PHP_EOL;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
+        return 0;
     }
 
     private function processRecord($record, $resourceIdXpath, $meemooImageUrlXpath, $collection)
@@ -118,25 +123,19 @@ class ProcessOffloadedResourcesCommand extends Command
                 $resourceData = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
 
                 $key = $this->offloadStatusField['key'];
+                var_dump($resourceData[$key]);
                 $offloadedValue = $this->offloadStatusField['values']['offloaded'];
+                $offloadedButKeeporiginalValue = $this->offloadStatusField['values']['offloaded_but_keep_original'];
                 $offloadPendingvalue = $this->offloadStatusField['values']['offload_pending'];
+                $offloadPendingButKeepOriginalvalue = $this->offloadStatusField['values']['offload_pending_but_keep_original'];
 
                 //TODO process
-                //TODO what about resources that have 'Pending' offload status but used to be marked with 'Offload but keep original'? How do we know we wanted to keep the original?
-
-                $syncTimestampField = $this->resourceSpaceMetadataFields['sync_timestamp'];
-                if(!empty($syncTimestampField)) {
-                    $this->resourceSpace->updateField($resourceId, $syncTimestampField, DateTimeUtil::formatTimestampWithTimezone());
-                }
-
+/*
                 if($imageUrl != null) {
                     if(!empty($imageUrl)) {
-                        $meemooImageUrlField = $this->resourceSpaceMetadataFields['meemoo_image_url'];
-                        if(!empty($meemooImageUrlField)) {
-                            $this->resourceSpace->updateField($resourceId, $meemooImageUrlField, $imageUrl);
-                        }
+                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
                     }
-                }
+                }*/
             }
         }
     }
