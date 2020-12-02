@@ -21,13 +21,18 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 class ProcessOffloadedResourcesCommand extends Command
 {
     private $params;
+    private $dryRun;
+    private $verbose;
     private $resourceSpace;
     private $offloadStatusField;
     private $resourceSpaceMetadataFields;
 
-    public function __construct(ParameterBagInterface $params)
+    private $resourcesProcessed;
+
+    public function __construct(ParameterBagInterface $params, $dryRun = false)
     {
         $this->params = $params;
+        $this->dryRun = $dryRun;
         parent::__construct();
     }
 
@@ -38,10 +43,24 @@ class ProcessOffloadedResourcesCommand extends Command
             ->setDescription('Checks the status of the last offloaded images and deletes originals if successful. NOTE: deleting of originals is not yet supported at this time!');
     }
 
+    public function setVerbose($verbose)
+    {
+        $this->verbose = $verbose;
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $this->verbose = $input->getOption('verbose');
+        $this->process();
+        return 0;
+    }
+
+    public function process()
+    {
+        $this->resourceSpace = new ResourceSpace($this->params);
+
         $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
-        if(file_exists($lastTimestampFile)) {
+        if (file_exists($lastTimestampFile)) {
             $file = fopen($lastTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
             $lastOffloadTimestamp = fgets($file);
             fclose($file);
@@ -54,6 +73,12 @@ class ProcessOffloadedResourcesCommand extends Command
 
         $lastOffloadDateTime = DateTimeUtil::formatTimestampWithTimezone($lastOffloadTimestamp);
 
+        $this->processOaiPmhApi($lastOffloadDateTime);
+        $this->processMissingResources($lastOffloadDateTime);
+    }
+
+    private function processOaiPmhApi($lastOffloadDateTime)
+    {
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
         $collections = $this->params->get('collections')['values'];
@@ -76,12 +101,14 @@ class ProcessOffloadedResourcesCommand extends Command
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {
-                    $this->processRecord($record->metadata->children($oaiPmhApi['namespace'], true), $oaiPmhApi['resourcespace_id_xpath'], $oaiPmhApi['meemoo_image_url_xpath'], $collection);
+                    $this->processRecord($record->metadata->children($oaiPmhApi['namespace'], true),
+                        $oaiPmhApi['url'] . '?verb=GetRecord&metadataPrefix=' . $oaiPmhApi['metadata_prefix'] . '&identifier=' . $record->header->identifier,
+                        $oaiPmhApi['resourcespace_id_xpath'], $oaiPmhApi['meemoo_image_url_xpath']);
                 }
             }
             catch(OaipmhException $e) {
                 if($e->getOaiErrorCode() == 'noRecordsMatch') {
-                    // No need to do anything, there are simply no records to process.
+                    echo 'No records to process, exiting.' . PHP_EOL;
                 } else {
                     echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
@@ -96,47 +123,54 @@ class ProcessOffloadedResourcesCommand extends Command
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
-        return 0;
     }
 
-    private function processRecord($record, $resourceIdXpath, $meemooImageUrlXpath, $collection)
+    private function processRecord($record, $assetUrl, $resourceIdXpath, $meemooImageUrlXpath)
     {
         $resourceIds = $record->xpath($resourceIdXpath);
         foreach($resourceIds as $resourceId) {
-            echo $resourceId . PHP_EOL;
 
             $imageUrl = null;
             $imageUrls = $record->xpath($meemooImageUrlXpath);
             foreach($imageUrls as $url) {
                 $imageUrl = $url;
             }
-            echo $imageUrl . PHP_EOL;
-
-            if($this->resourceSpace == null) {
-                $this->resourceSpace = new ResourceSpace($this->params);
-            }
 
             $rawResourceData = $this->resourceSpace->getRawResourceFieldData($resourceId);
             if($rawResourceData == null) {
-                echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!';
+                echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!' . PHP_EOL;
             } else {
                 $resourceData = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
 
-                $key = $this->offloadStatusField['key'];
-                var_dump($resourceData[$key]);
-                $offloadedValue = $this->offloadStatusField['values']['offloaded'];
-                $offloadedButKeeporiginalValue = $this->offloadStatusField['values']['offloaded_but_keep_original'];
-                $offloadPendingvalue = $this->offloadStatusField['values']['offload_pending'];
-                $offloadPendingButKeepOriginalvalue = $this->offloadStatusField['values']['offload_pending_but_keep_original'];
-
-                //TODO process
-/*
-                if($imageUrl != null) {
-                    if(!empty($imageUrl)) {
-                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
+                if(!$this->dryRun) {
+                    if(!empty($this->resourceSpaceMetadataFields['meemoo_asset_url'])) {
+                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
                     }
-                }*/
+                    if($imageUrl != null) {
+                        if(!empty($imageUrl)) {
+                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
+                        }
+                    }
+
+                    $statusKey = $this->offloadStatusField['key'];
+                    if ($resourceData[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceData[$statusKey] != $this->offloadStatusField['values']['offload_pending']) {
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
+                    } else if ($resourceData[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceData[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
+                    }
+                }
+                if($this->verbose) {
+                    echo 'Resource ' . $resourceId . ' has been processed.' . PHP_EOL;
+                }
+
+                $this->resourcesProcessed[] = $resourceId;
             }
         }
+    }
+
+    private function processMissingResources($lastOffloadDateTime)
+    {
+        //TODO implement
+        
     }
 }
