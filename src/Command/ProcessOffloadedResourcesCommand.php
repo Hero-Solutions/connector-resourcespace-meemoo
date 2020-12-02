@@ -1,8 +1,6 @@
 <?php
 
-
 namespace App\Command;
-
 
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
@@ -70,18 +68,21 @@ class ProcessOffloadedResourcesCommand extends Command
 
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
+        $collections = $this->params->get('collections');
+        $collectionKey = $collections['key'];
 
         $lastOffloadDateTime = DateTimeUtil::formatTimestampWithTimezone($lastOffloadTimestamp);
 
-        $this->processOaiPmhApi($lastOffloadDateTime);
-        $this->processMissingResources($lastOffloadDateTime);
+        $this->resourcesProcessed = array();
+
+        $this->processOaiPmhApi($collections['values'], $lastOffloadDateTime);
+        $this->processMissingResources($collections['values'], $collectionKey);
     }
 
-    private function processOaiPmhApi($lastOffloadDateTime)
+    private function processOaiPmhApi($collections, $lastOffloadDateTime)
     {
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
-        $collections = $this->params->get('collections')['values'];
         $oaiPmhApi = $this->params->get('oai_pmh_api');
 
         foreach($collections as $collection) {
@@ -128,7 +129,8 @@ class ProcessOffloadedResourcesCommand extends Command
     private function processRecord($record, $assetUrl, $resourceIdXpath, $meemooImageUrlXpath)
     {
         $resourceIds = $record->xpath($resourceIdXpath);
-        foreach($resourceIds as $resourceId) {
+        foreach($resourceIds as $id) {
+            $resourceId = strval($id);
 
             $imageUrl = null;
             $imageUrls = $record->xpath($meemooImageUrlXpath);
@@ -163,14 +165,35 @@ class ProcessOffloadedResourcesCommand extends Command
                     echo 'Resource ' . $resourceId . ' has been processed.' . PHP_EOL;
                 }
 
-                $this->resourcesProcessed[] = $resourceId;
+                if($this->dryRun) {
+                    $this->resourcesProcessed[] = $resourceId;
+                }
             }
         }
     }
 
-    private function processMissingResources($lastOffloadDateTime)
+    private function processMissingResources($collections, $collectionKey)
     {
-        //TODO implement
-        
+        $offloadStatusFilter = array($this->offloadStatusField['values']['offload_pending'], $this->offloadStatusField['values']['offload_pending_but_keep_original']);
+
+        // Loop through all collections
+        foreach($collections as $collection) {
+            $allResources = $this->resourceSpace->getAllResources($collectionKey, $collection);
+            // Loop through all resources in this collection
+            foreach($allResources as $resourceInfo) {
+                $resourceId = $resourceInfo['ref'];
+                if($this->dryRun) {
+                    if (in_array($resourceId, $this->resourcesProcessed)) {
+                        continue;
+                    }
+                }
+
+                // Get this resource's metadata, but only if it has an appropriate offloadStatus
+                $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $offloadStatusFilter);
+                if($resourceMetadata != null) {
+                    echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
+                }
+            }
+        }
     }
 }
