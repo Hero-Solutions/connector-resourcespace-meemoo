@@ -30,6 +30,8 @@ class TestMetadataModelCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $cmd = new OffloadResourcesCommand($this->params, true);
+        $cmd->setVerbose($input->getOption('verbose'));
         $cmd->offloadImages();
+        return 0;
     }
 }

@@ -20,6 +20,7 @@ class OffloadResourcesCommand extends Command
 {
     private $params;
     private $dryRun;
+    private $verbose;
 
     /**
      * @var FtpUtil
@@ -61,9 +62,16 @@ class OffloadResourcesCommand extends Command
             ->setDescription('Lists all ResourceSpace resources and offloads all images with the appropriate metadata onto an FTP server.');
     }
 
+    public function setVerbose($verbose)
+    {
+        $this->verbose = $verbose;
+    }
+
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        $this->verbose = $input->getOption('verbose');
         $this->offloadImages();
+        return 0;
     }
 
     public function offloadImages()
@@ -78,12 +86,13 @@ class OffloadResourcesCommand extends Command
         $this->ftpUtil = new FtpUtil($this->params);
 
         $this->lastOffloadTimestamp = 0;
-        $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
-        if(file_exists($lastTimestampFile)) {
-            $file = fopen($lastTimestampFile, "r") or die("Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
+        $this->lastTimestampFile = $this->params->get('last_offload_timestamp_file');
+        if(file_exists($this->lastTimestampFile)) {
+            $file = fopen($this->lastTimestampFile, "r") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
             $this->lastOffloadTimestamp = fgets($file);
             fclose($file);
         }
+
         $this->outputFolder = $this->params->get('output_folder');
         if (!is_dir($this->outputFolder)) {
             mkdir($this->outputFolder);
@@ -137,7 +146,7 @@ class OffloadResourcesCommand extends Command
             foreach($allResources as $resourceInfo) {
                 $resourceId = $resourceInfo['ref'];
 
-                // Get this resource's metadata if it has an appropriate offloadStatus
+                // Get this resource's metadata, but only if it has an appropriate offloadStatus
                 $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
                 if($resourceMetadata != null) {
                     if($this->hassupportedExtension($resourceId, $resourceMetadata, $this->supportedExtensions)) {
@@ -158,7 +167,9 @@ class OffloadResourcesCommand extends Command
     {
         $extension = pathinfo($data['originalfilename'], PATHINFO_EXTENSION);
         if(!in_array($extension, $supportedExtensions)) {
-            echo 'ERROR: File ' . $data['originalfilename'] . ' (resource ' . $resourceId . ') has extension "' . $extension . '", which is not supported.' . PHP_EOL;
+            if($this->verbose) {
+                echo 'ERROR: File ' . $data['originalfilename'] . ' (resource ' . $resourceId . ') has extension "' . $extension . '", which is not supported.' . PHP_EOL;
+            }
             return false;
         } else {
             return true;
@@ -168,7 +179,7 @@ class OffloadResourcesCommand extends Command
     private function processResource($resourceId, $resourceInfo, $resourceMetadata, $collection)
     {
         // For debugging purposes
-//        var_dump($resource);
+//        var_dump($resourceMetadata);
 
         $uniqueFilename = $resourceId . '_' . $resourceMetadata['originalfilename'];
         $uniqueFilenameWithoutExtension = $resourceId . '_' . pathinfo($resourceMetadata['originalfilename'], PATHINFO_FILENAME);
@@ -205,11 +216,11 @@ class OffloadResourcesCommand extends Command
         if ($offloadMetadata || array_key_exists('modified', $resourceInfo)) {
             $metadataModifiedDate = $resourceInfo['modified'];
             if (!$offloadMetadata) {
-                //TODO prevent endless uploading of XML because the 'offload status' or 'offload timestamp' fields were changed, which will happen on every offload
                 if (strlen($metadataModifiedDate) > 0) {
-                    // Offload metadata if the metadata has been modified since the last offload
+                    // Check if the resource was modified since the last offload
                     if(strtotime($metadataModifiedDate) > $this->lastOffloadTimestamp) {
-
+                        // Check if any of the relevant ResourceSpace fields has changed since the last offload
+                        $offloadMetadata = $this->resourceSpace->didRelevantMetadataChange($resourceId, DateTimeUtil::formatTimestampSimple($this->lastOffloadTimestamp), $this->relevantResourceSpaceFields);
                     }
                 }
             }
@@ -220,18 +231,15 @@ class OffloadResourcesCommand extends Command
                         $this->offloadResource($resourceId, $resourceMetadata, $md5, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
                     }
 
-                    if ($offloadFile) {
-                        echo 'Resource file ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedTimestampAsString . ') will be offloaded' . PHP_EOL;
-                    } else {
-                        echo 'Resource file ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedTimestampAsString . ') will NOT be offloaded' . PHP_EOL;
+                    if($this->verbose) {
+                        if ($offloadFile) {
+                            echo 'Resource file ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedTimestampAsString . ') will be offloaded' . PHP_EOL;
+                        }
+                        echo 'Metadata ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
                     }
-                    echo 'Metadata ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
                 }
-            } else {
-                echo 'Resource & metadata ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will NOT be offloaded' . PHP_EOL;
             }
         }
-        echo PHP_EOL;
     }
 
     private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection, $md5, $creationDate)
@@ -254,7 +262,7 @@ class OffloadResourcesCommand extends Command
             }
         }
         if($this->metadataTemplate == null) {
-            return null;
+            die('Could not initialize Twig template - exiting.');
         }
 
         $xmlData = $this->metadataTemplate->render(array(
@@ -284,19 +292,21 @@ class OffloadResourcesCommand extends Command
 
     private function offloadResource($resourceId, $data, $md5, $xmlFile, $fileModified, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection)
     {
-        // Upload the image file and delete locally, but only if the file has been modified since the last offload
+        // Upload the image file and delete locally, but only if the file has been modified since the last offload (or the file has not been offloaded yet)
         if ($fileModified && $localFilename != null) {
             $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
             unlink($localFilename);
+
             // Update offload timestamp (resource) in ResourceSpace
-            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestamp());
+            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
         }
 
         // Upload the XML file and delete locally
         $this->ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilenameWithoutExtension . '.xml');
         unlink($xmlFile);
+
         // Update offload timestamp (metadata) in ResourceSpace
-        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestamp());
+        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestampWithTimezone());
 
         // Update offload status in ResourceSpace
         $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadValues['offload_pending']);

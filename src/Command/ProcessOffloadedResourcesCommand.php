@@ -52,7 +52,7 @@ class ProcessOffloadedResourcesCommand extends Command
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
 
-        $lastOffloadDateTime = DateTimeUtil::formatTimestamp($lastOffloadTimestamp);
+        $lastOffloadDateTime = DateTimeUtil::formatTimestampWithTimezone($lastOffloadTimestamp);
 
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
@@ -126,7 +126,7 @@ class ProcessOffloadedResourcesCommand extends Command
 
                 $syncTimestampField = $this->resourceSpaceMetadataFields['sync_timestamp'];
                 if(!empty($syncTimestampField)) {
-                    $this->resourceSpace->updateField($resourceId, $syncTimestampField, DateTimeUtil::formatTimestamp());
+                    $this->resourceSpace->updateField($resourceId, $syncTimestampField, DateTimeUtil::formatTimestampWithTimezone());
                 }
 
                 if($imageUrl != null) {
