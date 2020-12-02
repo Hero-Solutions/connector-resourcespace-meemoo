@@ -142,9 +142,9 @@ class ProcessOffloadedResourcesCommand extends Command
             if($rawResourceData == null) {
                 echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!' . PHP_EOL;
             } else {
-                $resourceData = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
-
                 if(!$this->dryRun) {
+                    $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
+
                     if(!empty($this->resourceSpaceMetadataFields['meemoo_asset_url'])) {
                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
                     }
@@ -155,9 +155,9 @@ class ProcessOffloadedResourcesCommand extends Command
                     }
 
                     $statusKey = $this->offloadStatusField['key'];
-                    if ($resourceData[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceData[$statusKey] != $this->offloadStatusField['values']['offload_pending']) {
+                    if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] != $this->offloadStatusField['values']['offload_pending']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
-                    } else if ($resourceData[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceData[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                    } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
                     }
                 }
