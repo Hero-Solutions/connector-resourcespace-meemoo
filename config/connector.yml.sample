@@ -1,25 +1,29 @@
 ---
 parameters:
 
+  supported_extensions:
+    - png
+    - jpg
+    - jpeg
+    - tif
+    - tiff
+
   resourcespace_api:
     url: ''
     username: ''
     key: ''
 
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
-  template_folder: 'config'
-  template_file: 'meemoo_metadata_template.xml'
-  output_dir: 'output'
 
-  # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
-  # remote_directory MUST have a trailing slash
-  ftp_server:
-    use_ssl: true
-    url: ''
-    port: 22
-    username: ''
-    password: ''
-    remote_directory: ''
+  # Certificate Authority (also known as 'cacert') may not work on its own depending on your system and PHP configuration,
+  # that's why a cacert.pem is included in this project (from https://curl.haxx.se/docs/caextract.html).
+  # Set override_certificate_authority to 'true' when we need to specify our own cacert.pem (can be a relative path or an absolute system path).
+  override_certificate_authority: true
+  ssl_certificate_authority_file: 'cacert.pem'
+
+  output_folder: 'output'
+  template_file: 'config/meemoo_metadata_template.xml'
+  template_xsd_schema_file: 'config/viaa_metadatamodel_van_cp_naar_viaa.xsd'
 
   collections:
     key: 'publisher'
@@ -29,17 +33,56 @@ parameters:
 #      - 'FOMU'
 #      - 'DIVA'
 
-  offload_status:
+  # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
+  # remote_directory MUST have both a leading and trailing slash
+  ftp_server:
+    use_ssl: true
+    url: ''
+    port: 22
+    credentials:
+      DEMUSEUMSTICHTING:
+        username: ''
+        password: ''
+        remote_directory: '/sample_dir/'
+
+  oai_pmh_api:
+    url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
+    resourcespace_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties/dc_identifier_localid'
+    meemoo_image_url_xpath: 'mets:fileSec/mets:fileGrp/mets:file/@xlink:href'
+    credentials:
+      DEMUSEUMSTICHTING:
+        username: ''
+        password: ''
+
+  offload_status_field:
     key: 'offloadstatus'
-    offload_value: 'Ready for offload'
-    offload_but_keep_original_value: 'Offload but keep original'
-    offloaded_value: 'Offloaded'
+    values:
+      offload: 'Ready for offload'
+      offload_but_keep_original: 'Offload but keep original'
+      offload_pending: 'Pending'
+      offload_pending_but_keep_original: 'Pending but keep original'
+      offloaded: 'Offloaded'
+      offloaded_but_keep_original: 'Offloaded but keep original'
+
+  resourcespace_metadata_fields:
+    offload_timestamp_resource: 'offloadtime'
+    offload_timestamp_metadata: 'offloadtimemeta'
+    meemoo_asset_url: ''
+    meemoo_image_url: 'linkoriginal'
 
   conversion_table:
+    cp:
+      FOMU: 'FOMU'
+      MOMU: 'MoMu'
+      DIVA: 'DIVA, Museum voor Edelsmeedkunst Juwelen en Diamant'
+      DEMUSEUMSTICHTING: 'MoMu'
     cp_id:
+      FOMU: ''
+      MOMU: ''
+      DIVA: ''
+      DEMUSEUMSTICHTING: ''
+    original_cp:
       FOMU: 1
       MOMU: 2
       DIVA: 3
       DEMUSEUMSTICHTING: 7
-    title:
-      Multi Test: 'the MULTITEST THING'

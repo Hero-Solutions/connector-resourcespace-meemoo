@@ -12,3 +12,5 @@
 .idea/*
 /output/*
 composer
+last_offload_timestamp.txt
+
