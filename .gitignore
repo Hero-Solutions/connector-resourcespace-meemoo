@@ -11,3 +11,4 @@
 ###< symfony/framework-bundle ###
 .idea/*
 /output/*
+composer
