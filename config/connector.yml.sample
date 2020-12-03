@@ -74,7 +74,7 @@ parameters:
     cp:
       FOMU: 'FOMU'
       MOMU: 'MoMu'
-      DIVA: 'DIVA, Museum voor Edelsmeedkunst Juwelen en Diamant'
+      DIVA: 'DIVA'
       DEMUSEUMSTICHTING: 'MoMu'
     cp_id:
       FOMU: ''

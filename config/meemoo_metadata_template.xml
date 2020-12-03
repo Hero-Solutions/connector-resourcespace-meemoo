@@ -66,17 +66,18 @@
   <dc_description>n/a</dc_description>
 {% endif %}
 <!-- Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description -->
+{% set description = [] %}
 {% if resource.externalnote is not empty %}
-{% if resource.sourcematerialtype is not empty %}
-{% set description = 'External Note: ' ~ resource.externalnote ~ ' - Material Type: ' ~ resource.sourcematerialtype %}
-{% else %}
-{% set description = 'External Note: ' ~ resource.externalnote %}
+{% set description = description | merge(['External Note: ' ~ resource.externalnote]) %}
 {% endif %}
-{% elseif resource.sourcematerialtype is not empty %}
-{% set description = 'Material Type: ' ~ resource.sourcematerialtype %}
+{% if resource.sourcematerialtype is not empty %}
+{% set description = description | merge(['Material type: ' ~ resource.sourcematerialtype]) %}
+{% endif %}
+{% if resource.copyrightnotice is not empty %}
+{% set description = description | merge(['Copyright notice: ' ~ resource.copyrightnotice]) %}
 {% endif %}
 {% if description is not empty %}
-  <dc_description_lang>{{ description }}</dc_description_lang>
+  <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
@@ -88,24 +89,21 @@
   <dc_rights_rightsOwners type="list">
 {% if resource.copyrightowner is not empty %}
 {% for copyrightowner in resource.copyrightowner|split(',') %}
-  <Auteursrechthouder>{{ copyrightowner }}</Auteursrechthouder>
+    <Auteursrechthouder>{{ copyrightowner }}</Auteursrechthouder>
 {% endfor %}
 {% endif %}
 {% if resource.artworkcopyrightowner is not empty %}
 {% for artworkcopyrightowner in resource.artworkcopyrightowner|split(',') %}
-  <Auteursrechthouder>{{ artworkcopyrightowner }}</Auteursrechthouder>
+    <Auteursrechthouder>{{ artworkcopyrightowner }}</Auteursrechthouder>
 {% endfor %}
 {% endif %}
 {% if resource.licensor is not empty %}
 {% for licensor in resource.licensor|split(',') %}
-  <Auteursrechthouder>{{ licensor }}</Auteursrechthouder>
+    <Auteursrechthouder>{{ licensor }}</Auteursrechthouder>
 {% endfor %}
 {% endif %}
   </dc_rights_rightsOwners>
 {% if resource.copyrightnotice is not empty %}
   <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
-{% endif %}
-{% if resource.credit is not empty %}
-  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
 {% endif %}
 </VIAA>
