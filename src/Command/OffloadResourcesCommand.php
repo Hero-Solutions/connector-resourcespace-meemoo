@@ -298,6 +298,8 @@ class OffloadResourcesCommand extends Command
             $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
             unlink($localFilename);
 
+            // Update offload status in ResourceSpace
+            $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadValues['offload_pending']);
             // Update offload timestamp (resource) in ResourceSpace
             $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
         }
@@ -308,9 +310,6 @@ class OffloadResourcesCommand extends Command
 
         // Update offload timestamp (metadata) in ResourceSpace
         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestampWithTimezone());
-
-        // Update offload status in ResourceSpace
-        $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadValues['offload_pending']);
 
         // Update ResourceSpace md5checksum if needed
         if ($fileModified) {
