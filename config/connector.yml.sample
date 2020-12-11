@@ -86,28 +86,6 @@ parameters:
       MOMU: 2
       DIVA: 3
       DEMUSEUMSTICHTING: 7
-    license:
-      Publiek domein:
-        - VIAA-ONDERWIJS
-        - VIAA-ONDERZOEK
-        - VIAA-BIBLIOTHEKEN
-        - VIAA-INTRAMUROS
-        - VIAA-INTRA_CP-CONTENT
-        - VIAA-INTRA_CP-METADATA-ALL
-        - VIAA-PUBLIEK-METADATA-LTD
-        - VIAA-PUBLIEK-METADATA-ALL
-        - VIAA-PUBLIEK-CONTENT
-        - Publiek domein
-        - CC-BY-SA-METADATA
-        - CC-BY-SA-CONTENT
-        - CC BY-ND-METADATA
-        - CC BY-ND-CONTENT
-        - CC BY-NC-METADATA
-        - CC BY-NC-CONTENT
-        - CC BY-NC-SA-METADATA
-        - CC BY-NC-SA-CONTENT
-        - CC BY-NC-ND-METADATA
-        - CC BY-NC-ND-CONTENT
     rightsstatement:
       Publiek domein:
         - VIAA-ONDERWIJS
@@ -130,3 +108,30 @@ parameters:
         - CC BY-NC-SA-CONTENT
         - CC BY-NC-ND-METADATA
         - CC BY-NC-ND-CONTENT
+      Onderwijs:
+        - VIAA-ONDERWIJS
+    license:
+      Publiek domein:
+        - VIAA-ONDERWIJS
+        - VIAA-ONDERZOEK
+        - VIAA-BIBLIOTHEKEN
+        - VIAA-INTRAMUROS
+        - VIAA-INTRA_CP-CONTENT
+        - VIAA-INTRA_CP-METADATA-ALL
+        - VIAA-PUBLIEK-METADATA-LTD
+        - VIAA-PUBLIEK-METADATA-ALL
+        - VIAA-PUBLIEK-CONTENT
+        - Publiek domein
+        - CC-BY-SA-METADATA
+        - CC-BY-SA-CONTENT
+        - CC BY-ND-METADATA
+        - CC BY-ND-CONTENT
+        - CC BY-NC-METADATA
+        - CC BY-NC-CONTENT
+        - CC BY-NC-SA-METADATA
+        - CC BY-NC-SA-CONTENT
+        - CC BY-NC-ND-METADATA
+        - CC BY-NC-ND-CONTENT
+      CC-BY:
+        - VIAA-ONDERWIJS
+        - VIAA-ONDERZOEK
