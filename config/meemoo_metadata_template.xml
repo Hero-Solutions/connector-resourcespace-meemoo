@@ -81,8 +81,14 @@
 {% endif %}
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
-{% if resource.license is not empty %}
-<!--    <licentie>{{ attribute(conversion_table.license, resource.license) }}</licentie> -->
+{% if resource.rightsstatements is not empty %}
+{% for license in attribute(conversion_table.rightsstatement, resource.rightsstatements) %}
+    <multiselect> {{ license }}</multiselect>
+{% endfor %}
+{% elseif resource.license is not empty %}
+{% for license in attribute(conversion_table.license, resource.license) %}
+    <multiselect>{{ license }}</multiselect>
+{% endfor %}
 {% endif %}
   </dc_rights_licenses>
 <!-- Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma -->

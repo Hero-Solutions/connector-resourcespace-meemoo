@@ -84,7 +84,9 @@ class ResourceSpace
         if($this->relevantMetadataFieldTitles == null) {
             $this->relevantMetadataFieldTitles = array();
             foreach($relevantFields as $field) {
-                $this->relevantMetadataFieldTitles[] = $this->metadataFieldTitles[$field];
+                if(array_key_exists($field, $this->metadataFieldTitles)) {
+                    $this->relevantMetadataFieldTitles[] = $this->metadataFieldTitles[$field];
+                }
             }
         }
 
