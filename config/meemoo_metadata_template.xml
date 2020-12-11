@@ -82,8 +82,8 @@
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
 {% if resource.rightsstatements is not empty %}
-{% for license in attribute(conversion_table.rightsstatement, resource.rightsstatements) %}
-    <multiselect> {{ license }}</multiselect>
+{% for license in attribute(conversion_table.rightsstatements, resource.rightsstatements) %}
+    <multiselect>{{ license }}</multiselect>
 {% endfor %}
 {% elseif resource.license is not empty %}
 {% for license in attribute(conversion_table.license, resource.license) %}
