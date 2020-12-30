@@ -7,28 +7,33 @@
   <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
   <dc_source>{{ filename }}</dc_source>
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
+{% if resource.inventorynumber is not empty %}
   <dc_identifier_localids type="list">
 <!-- XXXXXXXXXX Ik heb deze tag gevonden in handleiding. Vermoedelijk correct al moeten we toch nog eens nagaan wat ze net verwachten van die IDs -->
-{% if resource.inventorynumber is not empty %}
     <Object_number>{{ resource.inventorynumber }}</Object_number>
-{% endif %}
   </dc_identifier_localids>
+{% endif %}
   <md5>{{ md5_hash }}</md5>
   <dc_title>{{ resource.title }}</dc_title>
+{% if resource.event is not empty %}
   <dc_titles type="list">
     <alternatief>{{ resource.event }}</alternatief>
   </dc_titles>
-  <dcterms_created>{{ creation_date }}</dcterms_created>
-  <dc_creators type="list">
-{% if resource.artworkcreator is not empty %}
-{% for artworkcreator in resource.artworkcreator|split(',') %}
-  <Maker>{{ artworkcreator }}</Maker>
-{% endfor %}
 {% endif %}
+{% if creation_date is not empty %}
+  <dcterms_created>{{ creation_date }}</dcterms_created>
+{% endif %}
+{% if resource.artworkcreator is not empty %}
+  <dc_creators type="list">
+{% for artworkcreator in resource.artworkcreator|split(',') %}
+    <Maker>{{ artworkcreator }}</Maker>
+{% endfor %}
   </dc_creators>
+{% endif %}
+{% if resource.creator is not empty or resource.contributor is not empty %}
   <dc_contributors type="list">
-<!-- XXXXXXXXXX Digitalcreator is fictief en moeten worden aangepast in overleg met meemoo. Bijdrager komt uit handleiding en lijkt correct -->
 {% if resource.creator is not empty %}
+<!-- XXXXXXXXXX Digitalcreator is fictief en moeten worden aangepast in overleg met meemoo. Bijdrager komt uit handleiding en lijkt correct -->
 {% for creator in resource.creator|split(',') %}
 <!--    <Digitalcreator>{{ resource.creator }}</Digitalcreator> -->
 {% endfor %}
@@ -38,7 +43,9 @@
     <Bijdrager>{{ resource.contributor }}</Bijdrager>
 {% endfor %}
 {% endif %}
-</dc_contributors>
+  </dc_contributors>
+{% endif %}
+{% if resource.keywords is not empty or resource.personinimage is not empty or resource.category is not empty %}
 <!-- Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
   <dc_subjects type="list">
 {% if resource.keywords is not empty %}
@@ -57,6 +64,7 @@
 {% endfor %}
 {% endif %}
   </dc_subjects>
+{% endif %}
 <!-- Description met fallback voor TMS-description -->
 {% if resource.publisher == 'MOMU' and resource.tmsdescription is not empty %}
   <dc_description>{{ resource.tmsdescription }}</dc_description>
@@ -79,6 +87,7 @@
 {% if description is not empty %}
   <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
+{% if resource.rightsstatements is not empty or resource.license is not empty %}
 <!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
 {% if resource.rightsstatements is not empty %}
@@ -91,6 +100,8 @@
 {% endfor %}
 {% endif %}
   </dc_rights_licenses>
+{% endif %}
+{% if resource.copyrightowner is not empty or resource.artworkcopyrightowner is not empty or resource.licensor is not empty %}
 <!-- Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
   <dc_rights_rightsOwners type="list">
 {% if resource.copyrightowner is not empty %}
@@ -109,6 +120,7 @@
 {% endfor %}
 {% endif %}
   </dc_rights_rightsOwners>
+{% endif %}
 {% if resource.copyrightnotice is not empty %}
   <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
 {% endif %}
