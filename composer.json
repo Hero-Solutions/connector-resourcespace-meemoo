@@ -7,6 +7,7 @@
         "ext-curl": "^7.4",
         "ext-dom": "20031129",
         "ext-iconv": "*",
+        "ext-json": "^7.4",
         "ext-libxml": "^7.4",
         "ext-ssh2": "*",
         "caseyamcl/phpoaipmh": "^3.2",
@@ -16,8 +17,6 @@
         "symfony/framework-bundle": "4.4.*",
         "symfony/yaml": "4.4.*",
         "twig/twig": "^3.0"
-    },
-    "require-dev": {
     },
     "config": {
         "preferred-install": {

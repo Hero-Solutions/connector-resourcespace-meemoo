@@ -4,6 +4,7 @@ namespace App\Command;
 
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
+use App\Util\OaiPmhApiUtil;
 use DateTime;
 use Exception;
 use Phpoaipmh\Client;
@@ -87,24 +88,13 @@ class ProcessOffloadedResourcesCommand extends Command
 
         foreach($collections as $collection) {
             try {
-                $curlAdapter = new CurlAdapter();
-                $curlOpts = array(
-                    CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
-                    CURLOPT_USERPWD => $oaiPmhApi['credentials'][$collection]['username'] . ':' . $oaiPmhApi['credentials'][$collection]['password']
-                );
-                if($overrideCertificateAuthorityFile) {
-                    $curlOpts[CURLOPT_CAINFO] = $sslCertificateAuthorityFile;
-                    $curlOpts[CURLOPT_CAPATH] = $sslCertificateAuthorityFile;
-                }
-                $curlAdapter->setCurlOpts($curlOpts);
-                $oaiPmhClient = new Client($oaiPmhApi['url'], $curlAdapter);
-                $oaiPmhEndpoint = new Endpoint($oaiPmhClient);
+                $oaiPmhEndpoint = OaiPmhApiUtil::connect($oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {
                     $this->processRecord($record->metadata->children($oaiPmhApi['namespace'], true),
                         $oaiPmhApi['url'] . '?verb=GetRecord&metadataPrefix=' . $oaiPmhApi['metadata_prefix'] . '&identifier=' . $record->header->identifier,
-                        $oaiPmhApi['resourcespace_id_xpath'], $oaiPmhApi['meemoo_image_url_xpath']);
+                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['meemoo_image_url_xpath']);
                 }
             }
             catch(OaipmhException $e) {
@@ -132,6 +122,8 @@ class ProcessOffloadedResourcesCommand extends Command
         foreach($resourceIds as $id) {
             $resourceId = strval($id);
 
+            //Image url is currently not the original image but a derivative of the original.
+            //meemoo does not currently provide a way to access the original image in their filestore.
             $imageUrl = null;
             $imageUrls = $record->xpath($meemooImageUrlXpath);
             foreach($imageUrls as $url) {
@@ -145,24 +137,26 @@ class ProcessOffloadedResourcesCommand extends Command
                 if(!$this->dryRun) {
                     $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
 
-                    if(!empty($this->resourceSpaceMetadataFields['meemoo_asset_url'])) {
-                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
-                    }
+                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], urlencode($assetUrl));
                     if($imageUrl != null) {
                         if(!empty($imageUrl)) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
+                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], urlencode($imageUrl));
                         }
                     }
 
                     $statusKey = $this->offloadStatusField['key'];
-                    if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] != $this->offloadStatusField['values']['offload_pending']) {
-                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
+                    if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded'], true);
                     } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
-                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original'], true);
                     }
+
+                    //TODO 'delete' original
                 }
                 if($this->verbose) {
                     echo 'Resource ' . $resourceId . ' has been processed.' . PHP_EOL;
+                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
+                    echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
                 }
 
                 if($this->dryRun) {

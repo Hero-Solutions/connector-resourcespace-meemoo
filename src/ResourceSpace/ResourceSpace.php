@@ -10,9 +10,9 @@ class ResourceSpace
     private $apiUsername;
     private $apiKey;
 
-    // Metadata field titles, obtained during the first get_resource_field_data call
+    // All metadata field titles, obtained during the first get_resource_field_data call
     private $metadataFieldTitles = null;
-    // Relevant metadata field titles, based on a filtering of metadataFieldTitles based on the relevant fields that are passed on the first call of didRelevantMetadataChange()
+    // Relevant metadata field titles, a filtering of metadataFieldTitles based on the relevant fields that are passed on the first call of didRelevantMetadataChange()
     private $relevantMetadataFieldTitles = null;
 
     public function __construct(ParameterBagInterface $params)
@@ -116,15 +116,15 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
-    public function getResourceUrl($id)
+    public function getResourceUrl($id, $extension)
     {
-        $data = $this->doApiCall('get_resource_path&param1=' . $id . '&param2=0');
+        $data = $this->doApiCall('get_resource_path&param1=' . $id . '&param2=0&param5=' . $extension);
         return json_decode($data, true);
     }
 
-    public function updateField($id, $field, $value)
+    public function updateField($id, $field, $value, $nodeValue = false)
     {
-        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . $value);
+        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . $value . '&param4=' . $nodeValue);
         return json_decode($data, true);
     }
 

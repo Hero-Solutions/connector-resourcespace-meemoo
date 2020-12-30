@@ -47,27 +47,46 @@ parameters:
 
   oai_pmh_api:
     url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
-    resourcespace_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties/dc_identifier_localid'
+    metadata_prefix: 'mets'
+    namespace: 'mets'
+    fragment_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/FragmentId'
+    resource_data_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties'
+    resourcespace_id: 'dc_identifier_localid'
+    title: 'dc_title'
+    description: 'dc_description'
     meemoo_image_url_xpath: 'mets:fileSec/mets:fileGrp/mets:file/@xlink:href'
     credentials:
       DEMUSEUMSTICHTING:
         username: ''
         password: ''
 
+  # metadata_edit_url MUST end with a trailing slash
+  rest_api:
+    auth_url: 'https://archief-qas.viaa.be/auth/ropc.php'
+    metadata_edit_url: 'https://archief-qas.viaa.be/mediahaven-rest-api/v2/media/'
+    credentials:
+      DEMUSEUMSTICHTING:
+        username: ''
+        password: ''
+        client_id: ''
+        client_secret: ''
+
   offload_status_field:
     key: 'offloadstatus'
     values:
       offload: 'Ready for offload'
-      offload_but_keep_original: 'Offload but keep original'
       offload_pending: 'Pending'
-      offload_pending_but_keep_original: 'Pending but keep original'
       offloaded: 'Offloaded'
+      offload_failed: 'Failed'
+      offload_but_keep_original: 'Offload but keep original'
+      offload_pending_but_keep_original: 'Pending but keep original'
       offloaded_but_keep_original: 'Offloaded but keep original'
+      offload_failed_but_keep_original: 'Failed but keep original'
 
   resourcespace_metadata_fields:
     offload_timestamp_resource: 'offloadtime'
     offload_timestamp_metadata: 'offloadtimemeta'
-    meemoo_asset_url: ''
+    meemoo_asset_url: 'linkoffload'
     meemoo_image_url: 'linkoriginal'
 
   conversion_table:
