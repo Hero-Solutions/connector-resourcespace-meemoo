@@ -5,11 +5,9 @@ namespace App\Command;
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
 use App\Util\FtpUtil;
-use App\Util\JsonUtil;
 use App\Util\OaiPmhApiUtil;
 use App\Util\RestApi;
 use App\Util\XMLUtil;
-use DateTime;
 use DOMDocument;
 use DOMXPath;
 use Exception;
@@ -66,8 +64,8 @@ class OffloadResourcesCommand extends Command
     protected function configure()
     {
         $this
-            ->setName('app:offload-images')
-            ->setDescription('Lists all ResourceSpace resources and offloads all images with the appropriate metadata onto an FTP server.');
+            ->setName('app:offload-resources')
+            ->setDescription('Lists all ResourceSpace resources and offloads all images with the appropriate metadata onto an FTP server. Also updates changed metadata of existing resources in meemoo\'s archive.');
     }
 
     public function setVerbose($verbose)

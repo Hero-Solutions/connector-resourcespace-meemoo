@@ -40,9 +40,20 @@ Once you have done this, fill in the empty fields next to 'url', 'username' and 
 
 ## Usage
 
-For now, the project is only set up to test the meemoo metadata model. To do so, run the following command:
+To test the meemoo metadata model, run the following command:
 ```
 bin/console app:test-metadata
 ```
 
 This will generate zero, one or more metadata files inside the folder 'output' based on the template that is defined in 'meemoo_metadata_template.xml' inside the 'config' folder. The amount of files depend on the amount of resources in your ResourceSpace installation that have a non-empty 'offloadStatus'.
+
+To actually offload files and metadata (or to update metadata of existing resources in meemoo):
+```
+bin/console app:offload-resources
+```
+
+To check if the last offload was successful and delete the appropriate original images:
+```
+bin/console app:process-offloaded-resources
+```
+
