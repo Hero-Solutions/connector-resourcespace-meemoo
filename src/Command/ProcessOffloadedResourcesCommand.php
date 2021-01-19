@@ -25,6 +25,8 @@ class ProcessOffloadedResourcesCommand extends Command
     private $resourceSpace;
     private $offloadStatusField;
     private $resourceSpaceMetadataFields;
+    private $deleteOriginals;
+    private $pendingOffloadFilter;
 
     private $resourcesProcessed;
 
@@ -67,7 +69,9 @@ class ProcessOffloadedResourcesCommand extends Command
             die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastTimestampFile . "').");
         }
 
+        $this->deleteOriginals = $this->params->get('delete_originals');
         $this->offloadStatusField = $this->params->get('offload_status_field');
+        $this->pendingOffloadFilter = $this->offloadStatusField['values']['offload_pending'];
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
         $collections = $this->params->get('collections');
         $collectionKey = $collections['key'];
@@ -134,9 +138,10 @@ class ProcessOffloadedResourcesCommand extends Command
             if($rawResourceData == null) {
                 echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!' . PHP_EOL;
             } else {
-                if(!$this->dryRun) {
-                    $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
+                $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
+//                var_dump($resourceMetadata);
 
+                if(!$this->dryRun) {
                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], urlencode($assetUrl));
                     if($imageUrl != null) {
                         if(!empty($imageUrl)) {
@@ -151,7 +156,7 @@ class ProcessOffloadedResourcesCommand extends Command
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original'], true);
                     }
 
-                    //TODO 'delete' original
+                    //TODO 'delete' original. Seems best to implement this when meemoo has a IIIF endpoint so museums can still access their originals.
                 }
                 if($this->verbose) {
                     echo 'Resource ' . $resourceId . ' has been processed.' . PHP_EOL;

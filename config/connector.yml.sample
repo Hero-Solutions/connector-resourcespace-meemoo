@@ -2,11 +2,27 @@
 parameters:
 
   supported_extensions:
-    - png
-    - jpg
+    - jp2
     - jpeg
+    - jpg
+    - m4v
+    - mkv
+    - mov
+    - mp2
+    - mp3
+    - mp4
+    - mpg
+    - mxf
+    - ogg
+    - pdf
     - tif
     - tiff
+    - ts
+    - wav
+    - zip
+
+  # Whether to actually delete originals (true) or not (false). Set to false when offloading production resources to QAS archive.
+  delete_originals: false
 
   resourcespace_api:
     url: ''

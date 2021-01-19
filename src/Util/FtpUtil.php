@@ -50,6 +50,7 @@ class FtpUtil
                         $writtenBytes = stream_copy_to_stream($srcFile, $resFile);
                         fclose($resFile);
                         fclose($srcFile);
+                        //TODO keep track of written bytes and put a limit to this. Amount seems correct.
                         echo 'Written bytes: ' . $writtenBytes . PHP_EOL;
                     } else {
                         echo 'Unable to authenticate on server.' . PHP_EOL;
