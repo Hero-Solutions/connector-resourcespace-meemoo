@@ -45,9 +45,9 @@ parameters:
     key: 'publisher'
     values:
       - 'DEMUSEUMSTICHTING'
-#      - 'MOMU'
-#      - 'FOMU'
 #      - 'DIVA'
+#      - 'FOMU'
+#      - 'MOMU'
 
   # Port only needs to be supplied if use_ssl is set to true, in that case it is usually 22
   # remote_directory MUST have both a leading and trailing slash
@@ -59,7 +59,19 @@ parameters:
       DEMUSEUMSTICHTING:
         username: ''
         password: ''
-        remote_directory: '/sample_dir/'
+        remote_directory: '/incoming/borndigital/'
+      DIVA:
+        username: ''
+        password: ''
+        remote_directory: '/incoming/borndigital/'
+      FOMU:
+        username: ''
+        password: ''
+        remote_directory: '/incoming/borndigital/'
+      MOMU:
+        username: ''
+        password: ''
+        remote_directory: '/incoming/borndigital/'
 
   oai_pmh_api:
     url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
@@ -75,6 +87,15 @@ parameters:
       DEMUSEUMSTICHTING:
         username: ''
         password: ''
+      DIVA:
+        username: ''
+        password: ''
+      FOMU:
+        username: ''
+        password: ''
+      MOMU:
+        username: ''
+        password: ''
 
   # metadata_edit_url MUST end with a trailing slash
   rest_api:
@@ -82,6 +103,21 @@ parameters:
     metadata_edit_url: 'https://archief-qas.viaa.be/mediahaven-rest-api/v2/media/'
     credentials:
       DEMUSEUMSTICHTING:
+        username: ''
+        password: ''
+        client_id: ''
+        client_secret: ''
+      DIVA:
+        username: ''
+        password: ''
+        client_id: ''
+        client_secret: ''
+      FOMU:
+        username: ''
+        password: ''
+        client_id: ''
+        client_secret: ''
+      MOMU:
         username: ''
         password: ''
         client_id: ''
@@ -107,20 +143,20 @@ parameters:
 
   conversion_table:
     cp:
+      DEMUSEUMSTICHTING: 'MoMu'
+      DIVA: 'DIVA, Museum voor Edelsmeedkunst Juwelen en Diamant'
       FOMU: 'FOMU'
       MOMU: 'MoMu'
-      DIVA: 'DIVA'
-      DEMUSEUMSTICHTING: 'MoMu'
     cp_id:
+      DEMUSEUMSTICHTING: ''
+      DIVA: ''
       FOMU: ''
       MOMU: ''
-      DIVA: ''
-      DEMUSEUMSTICHTING: ''
     original_cp:
+      DEMUSEUMSTICHTING: 7
+      DIVA: 3
       FOMU: 1
       MOMU: 2
-      DIVA: 3
-      DEMUSEUMSTICHTING: 7
     rightsstatements:
       Publiek domein:
         - VIAA-ONDERWIJS
