@@ -23,9 +23,9 @@ class ResourceSpace
         $this->apiKey = $resourceSpaceApi['key'];
     }
 
-    public function getAllResources($key, $value)
+    public function getAllResources($search)
     {
-        $allResources = $this->doApiCall('do_search&param1=' . $key . ':' . $value);
+        $allResources = $this->doApiCall('do_search&param1=' . $search);
 
         if ($allResources == 'Invalid signature') {
             echo 'Error: invalid ResourceSpace API key. Please paste the key found in the ResourceSpace user management into config/connector.yml.' . PHP_EOL;
@@ -124,7 +124,7 @@ class ResourceSpace
 
     public function updateField($id, $field, $value, $nodeValue = false)
     {
-        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . $value . '&param4=' . $nodeValue);
+        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . str_replace(' ', '+', $value) . '&param4=' . $nodeValue);
         return json_decode($data, true);
     }
 

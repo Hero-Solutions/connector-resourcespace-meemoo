@@ -151,9 +151,9 @@ class ProcessOffloadedResourcesCommand extends Command
 
                     $statusKey = $this->offloadStatusField['key'];
                     if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
-                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded'], true);
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
                     } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
-                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original'], true);
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
                     }
 
                     //TODO 'delete' original. Seems best to implement this when meemoo has a IIIF endpoint so museums can still access their originals.
@@ -188,9 +188,17 @@ class ProcessOffloadedResourcesCommand extends Command
                 }
 
                 // Get this resource's metadata, but only if it has an appropriate offloadStatus
-                $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $offloadStatusFilter);
+                $statusKey = $this->offloadStatusField['key'];
+                $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $statusKey, $offloadStatusFilter);
                 if($resourceMetadata != null) {
                     echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
+                    if(!$this->dryRun) {
+                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                        }
+                    }
                 }
             }
         }

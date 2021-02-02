@@ -176,17 +176,28 @@ class OffloadResourcesCommand extends Command
     {
         // Loop through all collections
         foreach ($this->collections['values'] as $collection) {
-            $allResources = $this->resourceSpace->getAllResources($this->collectionKey, $collection);
-            // Loop through all resources in this collection
-            foreach ($allResources as $resourceInfo) {
-                $resourceId = $resourceInfo['ref'];
+            foreach($this->offloadStatusFilter as $filter) {
+                $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $this->collectionKey . ':' . $collection . '" "' . $this->offloadStatusField['key'] . ':' . $filter . '"'));
+                // Loop through all resources in this collection
+                foreach ($allResources as $resourceInfo) {
+                    $resourceId = $resourceInfo['ref'];
 
-                // Get this resource's metadata, but only if it has an appropriate offloadStatus
-                $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
-                if ($resourceMetadata != null) {
-                    $extension = pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION);
-                    if ($this->hassupportedExtension($resourceId, $resourceMetadata, $extension, $this->supportedExtensions)) {
-                        $this->processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension);
+                    // Get this resource's metadata, but only if it has an appropriate offloadStatus
+                    $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
+                    if ($resourceMetadata != null) {
+                        $extension = pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION);
+                        if ($this->hassupportedExtension($resourceId, $resourceMetadata, $extension, $this->supportedExtensions)) {
+                            $this->processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension);
+                        } else {
+                            if(!$this->dryRun) {
+                                $statusKey = $this->offloadStatusField['key'];
+                                if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                                } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -271,6 +282,15 @@ class OffloadResourcesCommand extends Command
                         }
                         if($offloaded) {
                             echo 'Metadata ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') will be offloaded' . PHP_EOL;
+                        }
+                    }
+                } else {
+                    if(!$this->dryRun) {
+                        $statusKey = $this->offloadStatusField['key'];
+                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
                         }
                     }
                 }
