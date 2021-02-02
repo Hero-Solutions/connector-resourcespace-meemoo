@@ -59,8 +59,10 @@
 {% endfor %}
 {% endif %}
 {% if resource.category is not empty %}
-{% for category in resource.category|split(',') %}
+{% for categorytemp in resource.category|split(',') %}
+{% for category in categorytemp|split('/')[1:] %}
     <Trefwoord>{{ category }}​​</Trefwoord>
+{% endfor %}
 {% endfor %}
 {% endif %}
   </dc_subjects>
