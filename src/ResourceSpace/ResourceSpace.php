@@ -130,7 +130,7 @@ class ResourceSpace
 
     private function doApiCall($query)
     {
-        $query = 'user=' . $this->apiUsername . '&function=' . $query;
+        $query = 'user=' . str_replace(' ', '+', $this->apiUsername) . '&function=' . $query;
         $url = $this->apiUrl . '?' . $query . '&sign=' . $this->getSign($query);
         $data = file_get_contents($url);
         return $data;
