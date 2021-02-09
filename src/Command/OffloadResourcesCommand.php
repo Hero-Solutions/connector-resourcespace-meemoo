@@ -181,6 +181,9 @@ class OffloadResourcesCommand extends Command
 
     private function processCollections()
     {
+        // Keep track of resource ID's that are already processed to prevent duplicates (duplicates may emerge through different searches)
+        $alreadyProcessed = array();
+
         // Loop through all collections
         foreach ($this->collections['values'] as $collection) {
             foreach($this->offloadStatusFilter as $filter) {
@@ -188,6 +191,10 @@ class OffloadResourcesCommand extends Command
                 // Loop through all resources in this collection
                 foreach ($allResources as $resourceInfo) {
                     $resourceId = $resourceInfo['ref'];
+                    if(in_array($resourceId, $alreadyProcessed)) {
+                        continue;
+                    }
+                    $alreadyProcessed[] = $resourceId;
 
                     // Get this resource's metadata, but only if it has an appropriate offloadStatus
                     $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
@@ -232,9 +239,13 @@ class OffloadResourcesCommand extends Command
                         } else {
                             if(!$this->dryRun) {
                                 $statusKey = $this->offloadStatusField['key'];
-                                if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                                if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
+                                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']) {
                                     $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                                } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                                } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
                                     $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
                                 }
                             }
@@ -317,9 +328,13 @@ class OffloadResourcesCommand extends Command
                 } else {
                     if(!$this->dryRun) {
                         $statusKey = $this->offloadStatusField['key'];
-                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']) {
                             $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
                             $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
                         }
                     }

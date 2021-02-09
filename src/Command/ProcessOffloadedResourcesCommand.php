@@ -193,9 +193,13 @@ class ProcessOffloadedResourcesCommand extends Command
                 if($resourceMetadata != null) {
                     echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
                     if(!$this->dryRun) {
-                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']) {
                             $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
                             $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
                         }
                     }
