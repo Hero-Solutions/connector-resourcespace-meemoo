@@ -52,6 +52,7 @@ class OffloadResourcesCommand extends Command
     private $oaiPmhApi;
 
     private $lastOffloadTimestamp;
+    private $lastMetadataTemplateChange;
     private $metadataTemplate;
 
     public function __construct(ParameterBagInterface $params, $dryRun = false)
@@ -109,6 +110,8 @@ class OffloadResourcesCommand extends Command
         if (!file_exists($this->templateFile)) {
             die('Metadata template is missing, please configure the location of your template in connector.yml and make sure it exists.');
         }
+
+        $this->lastMetadataTemplateChange = filemtime($this->templateFile);
 
         // Automatically determine which ResourceSpace fields are relevant based on the occurrences of 'resource.' in the metadata template.
         $this->relevantResourceSpaceFields = array();
@@ -252,7 +255,8 @@ class OffloadResourcesCommand extends Command
         }
 
         $offloadMetadata = false;
-        if ($offloadFile) {
+        // Always offload the metadata if the file is to be offloaded or if the metadata template has changed since the last offload
+        if ($offloadFile || $this->lastMetadataTemplateChange > $this->lastOffloadTimestamp) {
             // Always upload the metadata if the file was modified
             $offloadMetadata = true;
         } else {
