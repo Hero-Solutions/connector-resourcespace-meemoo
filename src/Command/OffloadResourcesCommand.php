@@ -32,6 +32,8 @@ class OffloadResourcesCommand extends Command
     private $oaiPmhEndpoint;
     private $restApi;
 
+    private $mandatoryResourceSpaceFields;
+    private $forbiddenResourceSpaceFields;
     private $relevantResourceSpaceFields;
     private $relevantMetadataFields;
     private $lastTimestampFile;
@@ -153,6 +155,8 @@ class OffloadResourcesCommand extends Command
         }
 
         $this->supportedExtensions = $this->params->get('supported_extensions');
+        $this->mandatoryResourceSpaceFields = $this->params->get('mandatory_resourcespace_fields');
+        $this->forbiddenResourceSpaceFields = $this->params->get('forbidden_resourcespace_fields');
         $this->collections = $this->params->get('collections');
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
@@ -189,7 +193,41 @@ class OffloadResourcesCommand extends Command
                     $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
                     if ($resourceMetadata != null) {
                         $extension = pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION);
-                        if ($this->hassupportedExtension($resourceId, $resourceMetadata, $extension, $this->supportedExtensions)) {
+                        $failed = false;
+                        if(!in_array($extension, $this->supportedExtensions)) {
+                            $failed = true;
+                            if($this->verbose) {
+                                echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has extension "' . $extension . '", which is not supported.' . PHP_EOL;
+                            }
+                        }
+                        if(!$failed) {
+                            foreach ($this->mandatoryResourceSpaceFields as $mandatoryField) {
+                                if (!array_key_exists($mandatoryField, $resourceMetadata)) {
+                                    $failed = true;
+                                    if($this->verbose) {
+                                        echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') is missing the mandatory metadata field "' . $mandatoryField . '".' . PHP_EOL;
+                                    }
+                                } else if (empty($resourceMetadata[$mandatoryField])) {
+                                    $failed = true;
+                                    if($this->verbose) {
+                                        echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has an empty mandatory metadata field "' . $mandatoryField . '".' . PHP_EOL;
+                                    }
+                                }
+                            }
+                        }
+                        if(!$failed) {
+                            foreach ($this->forbiddenResourceSpaceFields as $forbiddenField => $fieldData) {
+                                if (array_key_exists($forbiddenField, $resourceMetadata)) {
+                                    foreach($fieldData as $entry) {
+                                        if ($resourceMetadata[$forbiddenField] == $entry) {
+                                            $failed = true;
+                                            echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has value "' . $entry . '" for metadata field "' . $forbiddenField . '", which is not allowed.' . PHP_EOL;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if(!$failed) {
                             $this->processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension);
                         } else {
                             if(!$this->dryRun) {
@@ -210,18 +248,6 @@ class OffloadResourcesCommand extends Command
             $file = fopen($this->lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
             fwrite($file, time());
             fclose($file);
-        }
-    }
-
-    private function hasSupportedExtension($resourceId, $data, $extension, $supportedExtensions)
-    {
-        if (!in_array($extension, $supportedExtensions)) {
-            if ($this->verbose) {
-                echo 'ERROR: File ' . $data['originalfilename'] . ' (resource ' . $resourceId . ') has extension "' . $extension . '", which is not supported.' . PHP_EOL;
-            }
-            return false;
-        } else {
-            return true;
         }
     }
 

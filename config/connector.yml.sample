@@ -21,6 +21,17 @@ parameters:
     - wav
     - zip
 
+  # These fields must always be present or there will be no offload
+  mandatory_resourcespace_fields:
+    - title
+
+  # If one of these fields contain one of the listed values, there will be no offload
+  forbidden_resourcespace_fields:
+    license:
+      - Alle rechten voorbehouden
+    rightsstatements:
+      - In Copyright
+
   # Whether to actually delete originals (true) or not (false). Set to false when offloading production resources to QAS archive.
   delete_originals: false
 
