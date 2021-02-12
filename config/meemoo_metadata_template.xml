@@ -83,9 +83,6 @@
 {% if resource.sourcematerialtype is not empty %}
 {% set description = description | merge(['Material type: ' ~ resource.sourcematerialtype]) %}
 {% endif %}
-{% if resource.copyrightnotice is not empty %}
-{% set description = description | merge(['Copyright notice: ' ~ resource.copyrightnotice]) %}
-{% endif %}
 {% if description is not empty %}
   <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
