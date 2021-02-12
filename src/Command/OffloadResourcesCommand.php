@@ -11,6 +11,7 @@ use App\Util\XMLUtil;
 use DOMDocument;
 use DOMXPath;
 use Exception;
+use Phpoaipmh\Exception\OaipmhException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -29,7 +30,7 @@ class OffloadResourcesCommand extends Command
 
     private $ftpUtil;
     private $resourceSpace;
-    private $oaiPmhEndpoint;
+    private $oaiPmhEndpoints = array();
     private $restApi;
 
     private $mandatoryResourceSpaceFields;
@@ -153,6 +154,7 @@ class OffloadResourcesCommand extends Command
                 }
             }
         }
+        $this->relevantMetadataFields[] = 'dcterms_created';
 
         $this->supportedExtensions = $this->params->get('supported_extensions');
         $this->mandatoryResourceSpaceFields = $this->params->get('mandatory_resourcespace_fields');
@@ -292,11 +294,21 @@ class OffloadResourcesCommand extends Command
                 }
             }
         }
+        $calculateMd5 = false;
         if($offloadFile) {
+            $calculateMd5 = true;
+        } else if(!array_key_exists('md5checksum', $resourceMetadata)) {
+            $calculateMd5 = true;
+        } else if(empty($resourceMetadata['md5checksum'])) {
+            $calculateMd5 = true;
+        }
+        if($calculateMd5) {
             $localFilename = $this->outputFolder . '/' . $uniqueFilename;
             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
             copy($resourceUrl, $localFilename);
             $md5 = md5_file($localFilename);
+        } else {
+            $md5 = $resourceMetadata['md5checksum'];
         }
 
         $offloadMetadata = false;
@@ -304,8 +316,6 @@ class OffloadResourcesCommand extends Command
         if ($offloadFile || $this->lastMetadataTemplateChange > $this->lastOffloadTimestamp) {
             // Always upload the metadata if the file was modified
             $offloadMetadata = true;
-        } else {
-            $md5 = $resourceMetadata['md5checksum'];
         }
 
         if ($offloadMetadata || array_key_exists('modified', $resourceInfo)) {
@@ -492,40 +502,44 @@ class OffloadResourcesCommand extends Command
     private function getCurrentMeemooMetadata($assetUrl, $collection)
     {
         $oldData = null;
-        if ($this->oaiPmhEndpoint == null) {
-            $this->oaiPmhEndpoint = OaiPmhApiUtil::connect($this->oaiPmhApi, $collection, $this->overrideCertificateAuthorityFile, $this->sslCertificateAuthorityFile);
-        }
-        if ($this->oaiPmhEndpoint != null) {
-            $urlComponents = parse_url($assetUrl);
-            parse_str($urlComponents['query'], $params);
+        try {
+            if (!isset($this->oaiPmhEndpoints[$collection])) {
+                $this->oaiPmhEndpoints[$collection] = OaiPmhApiUtil::connect($this->oaiPmhApi, $collection, $this->overrideCertificateAuthorityFile, $this->sslCertificateAuthorityFile);
+            }
+            if (isset($this->oaiPmhEndpoints[$collection])) {
+                $urlComponents = parse_url($assetUrl);
+                parse_str($urlComponents['query'], $params);
 
-            $record = $this->oaiPmhEndpoint->getRecord($params['identifier'], $this->oaiPmhApi['metadata_prefix']);
-            $data = $record->GetRecord->record->metadata->children($this->oaiPmhApi['namespace'], true);
+                $record = $this->oaiPmhEndpoints[$collection]->getRecord($params['identifier'], $this->oaiPmhApi['metadata_prefix']);
+                $data = $record->GetRecord->record->metadata->children($this->oaiPmhApi['namespace'], true);
 
-            //Add missing namespaces
-            foreach($record->getNamespaces() as $name => $value) {
-                if(!empty($name)) {
-                    $data->addAttribute('xmlsn:xmlns:' . $name, $value);
+                //Add missing namespaces
+                foreach ($record->getNamespaces() as $name => $value) {
+                    if (!empty($name)) {
+                        $data->addAttribute('xmlsn:xmlns:' . $name, $value);
+                    }
+                }
+                $domDoc = new DOMDocument;
+                $xmlData = $data->asXML();
+                $domDoc->loadXML($xmlData);
+                $xpath = new DOMXPath($domDoc);
+                $results = $xpath->query($this->oaiPmhApi['fragment_id_xpath']);
+                $fragmentId = '';
+                //We really only expect 1 result
+                foreach ($results as $result) {
+                    $fragmentId = $result->nodeValue;
+                }
+                if (empty($fragmentId)) {
+                    $oldData = null;
+                } else {
+                    $oldData = [
+                        'fragment_id' => $fragmentId,
+                        'data' => XMLUtil::convertXmlToArray($domDoc, $xpath, $this->oaiPmhApi['resource_data_xpath'])
+                    ];
                 }
             }
-            $domDoc = new DOMDocument;
-            $xmlData = $data->asXML();
-            $domDoc->loadXML($xmlData);
-            $xpath = new DOMXPath($domDoc);
-            $results = $xpath->query($this->oaiPmhApi['fragment_id_xpath']);
-            $fragmentId = '';
-            //We really only expect 1 result
-            foreach($results as $result) {
-                $fragmentId = $result->nodeValue;
-            }
-            if(empty($fragmentId)) {
-                $oldData = null;
-            } else {
-                $oldData = [
-                    'fragment_id' => $fragmentId,
-                    'data' => XMLUtil::convertXmlToArray($domDoc, $xpath, $this->oaiPmhApi['resource_data_xpath'])
-                ];
-            }
+        } catch(OaipmhException $e) {
+            echo 'Error fetching ' . $collection . ' OAI-PMH record at ' . $assetUrl . ': ' . $e . PHP_EOL;
         }
         return $oldData;
     }

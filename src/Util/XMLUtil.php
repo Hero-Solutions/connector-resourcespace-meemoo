@@ -53,6 +53,7 @@ class XMLUtil
             foreach ($xmlNode->childNodes as $node) {
                 $val = self::convertRecursively($node, $isArray);
                 if($node->hasChildNodes()) {
+                    $arr = array();
                     if($isArray || $parentIsArray) {
                         $arr[$node->nodeName][] = $val;
                     } else {
