@@ -380,7 +380,7 @@ class OffloadResourcesCommand extends Command
             'filename' => $uniqueFilename,
             'collection' => $collection,
             'md5_hash' => $md5,
-            'creation_date' => $creationDate,
+            'creation_date' => str_replace(' ', 'T', $creationDate),
             'conversion_table' => $this->conversionTable
         ));
         // Remove zero width spaces (no idea how they got there)
