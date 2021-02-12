@@ -275,20 +275,30 @@ class OffloadResourcesCommand extends Command
         $localFilename = null;
         $fileModifiedTimestampAsString = null;
 
-        // Check when the file was last modified
-        if (array_key_exists('file_modified', $resourceInfo)) {
-            $fileModifiedTimestampAsString = $resourceInfo['file_modified'];
-            if (strlen($fileModifiedTimestampAsString) > 0) {
-                $fileModifiedTimestamp = strtotime($fileModifiedTimestampAsString);
-                if ($fileModifiedTimestamp > $this->lastOffloadTimestamp) {
-                    $localFilename = $this->outputFolder . '/' . $uniqueFilename;
-                    $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
-                    copy($resourceUrl, $localFilename);
-                    $md5 = md5_file($localFilename);
-
-                    $offloadFile = true;
+        // Always offload the file and metadata if offloadstatus is set to 'Offload' or 'Offload but keep original'
+        if(array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
+            $fieldValue = $resourceMetadata[$this->offloadStatusField['key']];
+            if($fieldValue == $this->offloadStatusField['values']['offload'] || $fieldValue == $this->offloadStatusField['values']['offload_but_keep_original']) {
+                $offloadFile = true;
+            }
+        }
+        if(!$offloadFile) {
+            // If the file was already offloaded in the past, check when the file was last modified to determine if we need to re-upload it
+            if (array_key_exists('file_modified', $resourceInfo)) {
+                $fileModifiedTimestampAsString = $resourceInfo['file_modified'];
+                if (strlen($fileModifiedTimestampAsString) > 0) {
+                    $fileModifiedTimestamp = strtotime($fileModifiedTimestampAsString);
+                    if ($fileModifiedTimestamp > $this->lastOffloadTimestamp) {
+                        $offloadFile = true;
+                    }
                 }
             }
+        }
+        if($offloadFile) {
+            $localFilename = $this->outputFolder . '/' . $uniqueFilename;
+            $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
+            copy($resourceUrl, $localFilename);
+            $md5 = md5_file($localFilename);
         }
 
         $offloadMetadata = false;
