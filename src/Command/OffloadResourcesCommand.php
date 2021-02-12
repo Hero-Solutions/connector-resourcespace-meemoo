@@ -168,8 +168,6 @@ class OffloadResourcesCommand extends Command
         $this->offloadStatusFilter = [
             $this->offloadValues['offload'],
             $this->offloadValues['offload_but_keep_original'],
-            $this->offloadValues['offload_pending'],
-            $this->offloadValues['offload_pending_but_keep_original'],
             $this->offloadValues['offloaded'],
             $this->offloadValues['offloaded_but_keep_original']
         ];
