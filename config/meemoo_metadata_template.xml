@@ -5,7 +5,7 @@
 
   <CP>{{ attribute(conversion_table.cp, resource.publisher) }}</CP>
   <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
-  <dc_source>{{ filename }}</dc_source>
+<!--  <dc_source>{{ filename }}</dc_source> -->
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
 {% if resource.inventorynumber is not empty %}
   <dc_identifier_localids type="list">
@@ -33,7 +33,7 @@
   <dc_contributors type="list">
 {% if resource.creator is not empty %}
 {% for creator in resource.creator|split(',') %}
-    <Digitaliseringspartner>{{ creator }}</Digitaliseringspartner>
+<!--    <Digitaliseringspartner>{{ creator }}</Digitaliseringspartner> -->
 {% endfor %}
 {% endif %}
 {% if resource.contributor is not empty %}
@@ -82,7 +82,7 @@
 {% set description = description | merge(['Material type: ' ~ resource.sourcematerialtype]) %}
 {% endif %}
 {% if description is not empty %}
-  <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
+  <dc_description_long>{{ description | join(' | ') }}</dc_description_long>
 {% endif %}
 {% if resource.rightsstatements is not empty or resource.license is not empty %}
   <dc_rights_licenses type="list">
