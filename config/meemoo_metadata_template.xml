@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <VIAA>
 
-<!-- LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML. ALSOOK AANPASSINGEN BIJ XXXXXXXXXX -->
+<!-- LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML -->
 
   <CP>{{ attribute(conversion_table.cp, resource.publisher) }}</CP>
   <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
@@ -9,7 +9,6 @@
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
 {% if resource.inventorynumber is not empty %}
   <dc_identifier_localids type="list">
-<!-- XXXXXXXXXX Ik heb deze tag gevonden in handleiding. Vermoedelijk correct al moeten we toch nog eens nagaan wat ze net verwachten van die IDs -->
     <Object_number>{{ resource.inventorynumber }}</Object_number>
   </dc_identifier_localids>
 {% endif %}
@@ -86,7 +85,6 @@
   <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
 {% if resource.rightsstatements is not empty or resource.license is not empty %}
-<!-- XXXXXXXXXX Dit moet nog helemaal uitgedacht worden, mogelijk rekening houdend met andere velden uit RS -->
   <dc_rights_licenses type="list">
 {% if resource.rightsstatements is not empty %}
 {% for license in attribute(conversion_table.rightsstatements, resource.rightsstatements) %}
