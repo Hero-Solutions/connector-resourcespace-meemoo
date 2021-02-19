@@ -33,14 +33,13 @@
 {% if resource.creator is not empty or resource.contributor is not empty %}
   <dc_contributors type="list">
 {% if resource.creator is not empty %}
-<!-- XXXXXXXXXX Digitalcreator is fictief en moeten worden aangepast in overleg met meemoo. Bijdrager komt uit handleiding en lijkt correct -->
 {% for creator in resource.creator|split(',') %}
-<!--    <Digitalcreator>{{ resource.creator }}</Digitalcreator> -->
+    <Digitaliseringspartner>{{ creator }}</Digitaliseringspartner>
 {% endfor %}
 {% endif %}
 {% if resource.contributor is not empty %}
 {% for contributor in resource.contributor|split(',') %}
-    <Bijdrager>{{ resource.contributor }}</Bijdrager>
+    <Bijdrager>{{ contributor }}</Bijdrager>
 {% endfor %}
 {% endif %}
   </dc_contributors>
