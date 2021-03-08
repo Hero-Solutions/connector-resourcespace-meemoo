@@ -60,7 +60,11 @@ class XMLUtil
                         $arr[$node->nodeName] = $val;
                     }
                 } else {
-                    $arr[] = $val;
+                    if($isArray) {
+                        $arr[] = $val;
+                    } else {
+                        $arr = $val;                        
+                    }
                 }
             }
         } else {
