@@ -60,15 +60,14 @@ class XMLUtil
                         $arr[$node->nodeName] = $val;
                     }
                 } else {
-                    if($isArray) {
-                        $arr[] = $val;
-                    } else {
-                        $arr = $val;                        
-                    }
+                    $arr[] = $val;                        
                 }
             }
         } else {
             return strval($xmlNode->nodeValue);
+        }
+        if(count($arr) == 1 && !$isArray) {
+            return $val[0];
         }
         return $arr;
     }
