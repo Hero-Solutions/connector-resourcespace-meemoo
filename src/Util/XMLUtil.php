@@ -67,7 +67,7 @@ class XMLUtil
             return strval($xmlNode->nodeValue);
         }
         if(count($arr) == 1 && !$isArray) {
-            return $val[0];
+            return $arr[0];
         }
         return $arr;
     }
