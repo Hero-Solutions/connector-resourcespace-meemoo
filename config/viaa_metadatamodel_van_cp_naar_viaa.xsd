@@ -154,7 +154,7 @@
           </xs:complexType>
         </xs:element>
         <xs:element maxOccurs="1" minOccurs="0" name="dc_description" type="xs:string"/>
-        <xs:element maxOccurs="1" minOccurs="0" name="dc_description_long" type="xs:string"/>
+        <xs:element maxOccurs="1" minOccurs="0" name="dc_description_lang" type="xs:string"/>
         <xs:element maxOccurs="1" minOccurs="0" name="dc_description_programme" type="xs:string"/>
         <xs:element maxOccurs="1" minOccurs="0" name="dc_description_cast" type="xs:string"/>
         <xs:element maxOccurs="1" minOccurs="0" name="dc_description_ondertitels" type="xs:string"/>

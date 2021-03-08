@@ -82,7 +82,7 @@
 {% set description = description | merge(['Material type: ' ~ resource.sourcematerialtype]) %}
 {% endif %}
 {% if description is not empty %}
-  <dc_description_long>{{ description | join(' | ') }}</dc_description_long>
+  <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
 {% if resource.rightsstatements is not empty or resource.license is not empty %}
   <dc_rights_licenses type="list">
