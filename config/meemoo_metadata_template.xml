@@ -118,8 +118,8 @@
   </dc_rights_rightsOwners>
 {% endif %}
 {% if resource.copyrightnotice is not empty and resource.credit is not empty %}
-  <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
-  <dc_rights_comment>{{ resource.credit }}</dc_rights_comment>
+  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
+  <dc_rights_comment>{{ resource.copyrightnotice }}</dc_rights_comment>
 {% elseif resource.copyrightnotice is not empty %}
   <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
 {% elseif resource.credit is not empty %}
