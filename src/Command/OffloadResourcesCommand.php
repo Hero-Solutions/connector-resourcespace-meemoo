@@ -171,7 +171,9 @@ class OffloadResourcesCommand extends Command
             $this->offloadValues['offload'],
             $this->offloadValues['offload_but_keep_original'],
             $this->offloadValues['offloaded'],
-            $this->offloadValues['offloaded_but_keep_original']
+            $this->offloadValues['offloaded_but_keep_original'],
+            $this->offloadValues['offload_failed'],
+            $this->offloadValues['offload_failed_but_keep_original'],
         ];
 
         $this->overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
