@@ -277,10 +277,10 @@ class OffloadResourcesCommand extends Command
         $localFilename = null;
         $fileModifiedTimestampAsString = null;
 
-        // Always offload the file and metadata if offloadstatus is set to 'Offload' or 'Offload but keep original'
+        // Always offload the file and metadata if offloadstatus is set to 'Offload' or 'Offload but keep original' or 'Offload failed' or 'Failed but keep original'
         if(array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
             $fieldValue = $resourceMetadata[$this->offloadStatusField['key']];
-            if($fieldValue == $this->offloadStatusField['values']['offload'] || $fieldValue == $this->offloadStatusField['values']['offload_but_keep_original']) {
+            if($fieldValue == $this->offloadStatusField['values']['offload'] || $fieldValue == $this->offloadStatusField['values']['offload_but_keep_original'] || $fieldValue == $this->offloadStatusField['values']['offload_failed'] || $fieldValue == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
                 $offloadFile = true;
             }
         }
@@ -422,7 +422,15 @@ class OffloadResourcesCommand extends Command
                 unlink($localFilename);
 
                 // Update offload status in ResourceSpace
-                $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadValues['offload_pending']);
+                if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
+                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']
+                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                    $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offload_pending']);
+                } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']
+                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
+                    $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offload_pending_but_keep_original']);
+                }
                 // Update offload timestamp (resource) in ResourceSpace
                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
                 // Upload the XML file and delete locally
