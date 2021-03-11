@@ -103,7 +103,7 @@ class ProcessOffloadedResourcesCommand extends Command
             }
             catch(OaipmhException $e) {
                 if($e->getOaiErrorCode() == 'noRecordsMatch') {
-                    echo 'No records to process, exiting.' . PHP_EOL;
+                    echo 'No records to process for ' . $collection . '.' . PHP_EOL;
                 } else {
                     echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
