@@ -421,15 +421,16 @@ class OffloadResourcesCommand extends Command
                 $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
                 unlink($localFilename);
 
+                $statusKey = $this->offloadStatusField['key'];
                 // Update offload status in ResourceSpace
-                if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
-                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']
-                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
-                    $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offload_pending']);
-                } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
-                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']
-                    || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
-                    $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offload_pending_but_keep_original']);
+                if ($data[$statusKey] == $this->offloadStatusField['values']['offload']
+                    || $data[$statusKey] == $this->offloadStatusField['values']['offloaded']
+                    || $data[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_pending']);
+                } else if ($data[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                    || $data[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']
+                    || $data[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
+                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_pending_but_keep_original']);
                 }
                 // Update offload timestamp (resource) in ResourceSpace
                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
