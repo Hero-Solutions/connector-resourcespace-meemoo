@@ -485,7 +485,7 @@ class OffloadResourcesCommand extends Command
                             $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Dynamic' => $difference));
 
                             if(!$this->dryRun) {
-                                $this->restApi->updateMetadata($collection, $fragmentId, json_encode($query));
+                                $result = $this->restApi->updateMetadata($collection, $fragmentId, json_encode($query));
                             }
                         }
                     }
