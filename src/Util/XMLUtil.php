@@ -59,7 +59,7 @@ class XMLUtil
                     } else {
                         $arr[$node->nodeName] = $val;
                     }
-                } else {
+                } else if(!empty($val)) {
                     $arr[] = $val;                        
                 }
             }
