@@ -33,7 +33,7 @@ class RestApi
         }
         if(!array_key_exists($collection, $this->tokens)) {
             echo 'No valid OAuth token - metadata was not updated!' . PHP_EOL;
-            return;
+            return false;
         }
 
         // Remove zero width spaces (no idea how they got there)
@@ -50,10 +50,12 @@ class RestApi
         curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
         curl_setopt($ch,CURLOPT_POSTFIELDS, $jsonQuery);
 
+        $result = false;
         $resultJson = curl_exec($ch);
         if (!curl_errno($ch)) {
             switch ($http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE)) {
                 case 200:  # OK
+                    $result = true;
                     break;
                 default:
                     echo 'HTTP error ' .  $http_code . ': ' . json_decode($resultJson)->Message . PHP_EOL;
@@ -61,6 +63,7 @@ class RestApi
             }
         }
         curl_close($ch);
+        return $result;
     }
 
     private function initializeToken($collection)
