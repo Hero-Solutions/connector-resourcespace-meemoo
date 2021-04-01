@@ -6,7 +6,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
-class TestMetadataModelCommand extends Command
+class UpdateMetadataCommand extends Command
 {
     private $params;
 
@@ -19,13 +19,13 @@ class TestMetadataModelCommand extends Command
     protected function configure()
     {
         $this
-            ->setName('app:test-metadata')
-            ->setDescription('Lists all ResourceSpace resources and generates XML metadata files for the appropriate resources (dry run, does not actually offload images).');
+            ->setName('app:update-metadata')
+            ->setDescription('Force an update of the metadata of all resources with an appropriate offload status, does not offload any files.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $cmd = new OffloadResourcesCommand($this->params, false, true);
+        $cmd = new OffloadResourcesCommand($this->params, true);
         $cmd->setVerbose($input->getOption('verbose'));
         $cmd->offloadImages();
         return 0;

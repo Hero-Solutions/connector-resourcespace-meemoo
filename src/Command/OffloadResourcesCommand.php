@@ -26,6 +26,7 @@ class OffloadResourcesCommand extends Command
 {
     private $params;
     private $dryRun;
+    private $forceUpdateMetadata;
     private $verbose;
 
     private $ftpUtil;
@@ -58,9 +59,10 @@ class OffloadResourcesCommand extends Command
     private $lastMetadataTemplateChange;
     private $metadataTemplate;
 
-    public function __construct(ParameterBagInterface $params, $dryRun = false)
+    public function __construct(ParameterBagInterface $params, $forceUpdate = false, $dryRun = false)
     {
         $this->params = $params;
+        $this->forceUpdateMetadata = $forceUpdate;
         $this->dryRun = $dryRun;
         parent::__construct();
     }
@@ -277,21 +279,24 @@ class OffloadResourcesCommand extends Command
         $localFilename = null;
         $fileModifiedTimestampAsString = null;
 
-        // Always offload the file and metadata if offloadstatus is set to 'Offload' or 'Offload but keep original' or 'Offload failed' or 'Failed but keep original'
-        if(array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
-            $fieldValue = $resourceMetadata[$this->offloadStatusField['key']];
-            if($fieldValue == $this->offloadStatusField['values']['offload'] || $fieldValue == $this->offloadStatusField['values']['offload_but_keep_original'] || $fieldValue == $this->offloadStatusField['values']['offload_failed'] || $fieldValue == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
-                $offloadFile = true;
+        if(!$this->forceUpdateMetadata) {
+            // Always offload the file and metadata if offloadstatus is set to 'Offload' or 'Offload but keep original' or 'Offload failed' or 'Failed but keep original'
+            if (array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
+                $fieldValue = $resourceMetadata[$this->offloadStatusField['key']];
+                if ($fieldValue == $this->offloadStatusField['values']['offload'] || $fieldValue == $this->offloadStatusField['values']['offload_but_keep_original'] || $fieldValue == $this->offloadStatusField['values']['offload_failed'] || $fieldValue == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
+                    $offloadFile = true;
+                }
             }
-        }
-        if(!$offloadFile) {
-            // If the file was already offloaded in the past, check when the file was last modified to determine if we need to re-upload it
-            if (array_key_exists('file_modified', $resourceInfo)) {
-                $fileModifiedTimestampAsString = $resourceInfo['file_modified'];
-                if (strlen($fileModifiedTimestampAsString) > 0) {
-                    $fileModifiedTimestamp = strtotime($fileModifiedTimestampAsString);
-                    if ($fileModifiedTimestamp > $this->lastOffloadTimestamp) {
-                        $offloadFile = true;
+            if (!$offloadFile) {
+                // If the file was already offloaded in the past, check when the file was last modified to determine if we need to re-upload it
+                // TODO: test if 'deleting' the original does not lead to a new offload, which shouldn't happen
+                if (array_key_exists('file_modified', $resourceInfo)) {
+                    $fileModifiedTimestampAsString = $resourceInfo['file_modified'];
+                    if (strlen($fileModifiedTimestampAsString) > 0) {
+                        $fileModifiedTimestamp = strtotime($fileModifiedTimestampAsString);
+                        if ($fileModifiedTimestamp > $this->lastOffloadTimestamp) {
+                            $offloadFile = true;
+                        }
                     }
                 }
             }
@@ -313,7 +318,7 @@ class OffloadResourcesCommand extends Command
             $md5 = $resourceMetadata['md5checksum'];
         }
 
-        $offloadMetadata = false;
+        $offloadMetadata = $this->forceUpdateMetadata;
         // Always offload the metadata if the file is to be offloaded or if the metadata template has changed since the last offload
         if ($offloadFile || $this->lastMetadataTemplateChange > $this->lastOffloadTimestamp) {
             // Always upload the metadata if the file was modified
@@ -433,7 +438,7 @@ class OffloadResourcesCommand extends Command
                     $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_pending_but_keep_original']);
                 }
                 // Update offload timestamp (resource) in ResourceSpace
-                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
+                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], urlencode(DateTimeUtil::formatTimestampWithTimezone()));
                 // Upload the XML file and delete locally
                 $this->ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilenameWithoutExtension . '.xml');
             }
@@ -491,19 +496,21 @@ class OffloadResourcesCommand extends Command
         if (!$this->dryRun) {
             unlink($xmlFile);
 
-            // Update offload timestamp (metadata) in ResourceSpace
-            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestampWithTimezone());
+            if($result) {
+                // Update offload timestamp (metadata) in ResourceSpace
+                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], urlencode(DateTimeUtil::formatTimestampWithTimezone()));
 
-            // Update ResourceSpace md5checksum if needed
-            if ($fileModified) {
-                $updatemd5 = false;
-                if (!array_key_exists('md5checksum', $data)) {
-                    $updatemd5 = true;
-                } else if ($data['md5checksum'] != $md5) {
-                    $updatemd5 = true;
-                }
-                if ($updatemd5) {
-                    $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+                // Update ResourceSpace md5checksum if needed
+                if ($fileModified) {
+                    $updatemd5 = false;
+                    if (!array_key_exists('md5checksum', $data)) {
+                        $updatemd5 = true;
+                    } else if ($data['md5checksum'] != $md5) {
+                        $updatemd5 = true;
+                    }
+                    if ($updatemd5) {
+                        $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+                    }
                 }
             }
         }
@@ -593,5 +600,4 @@ class OffloadResourcesCommand extends Command
         }
         return $difference;
     }
-
 }
