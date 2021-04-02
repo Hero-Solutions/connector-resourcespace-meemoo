@@ -259,7 +259,7 @@ class OffloadResourcesCommand extends Command
             }
         }
 
-        if (!$this->dryRun) {
+        if (!$this->dryRun && !$this->forceUpdateMetadata) {
             $file = fopen($this->lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
             fwrite($file, time());
             fclose($file);
