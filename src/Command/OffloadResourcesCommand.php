@@ -203,7 +203,7 @@ class OffloadResourcesCommand extends Command
                     // Get this resource's metadata, but only if it has an appropriate offloadStatus
                     $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
                     if ($resourceMetadata != null) {
-                        $extension = pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION);
+                        $extension = strtolower(pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION));
                         $failed = false;
                         if(!in_array($extension, $this->supportedExtensions)) {
                             $failed = true;
@@ -271,8 +271,8 @@ class OffloadResourcesCommand extends Command
         // For debugging purposes
 //        var_dump($resourceMetadata);
 
-        $uniqueFilename = $resourceId . '_' . $resourceMetadata['originalfilename'];
         $uniqueFilenameWithoutExtension = $resourceId . '_' . pathinfo($resourceMetadata['originalfilename'], PATHINFO_FILENAME);
+        $uniqueFilename = $uniqueFilenameWithoutExtension . '.' . $extension;
 
         $md5 = null;
         $offloadFile = false;
