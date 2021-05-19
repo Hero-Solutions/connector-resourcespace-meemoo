@@ -108,10 +108,11 @@ parameters:
         username: ''
         password: ''
 
-  # metadata_edit_url MUST end with a trailing slash
+  # metadata_edit_url and export_url MUST end with a trailing slash
   rest_api:
     auth_url: 'https://archief-qas.viaa.be/auth/ropc.php'
     metadata_edit_url: 'https://archief-qas.viaa.be/mediahaven-rest-api/v2/media/'
+    export_url: 'https://archief-qas.viaa.be/mediahaven-rest-api/v2/exports/'
     credentials:
       DEMUSEUMSTICHTING:
         username: ''
