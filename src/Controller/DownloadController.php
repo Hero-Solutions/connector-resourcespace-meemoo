@@ -24,6 +24,7 @@ class DownloadController extends AbstractController
             ->select('i')
             ->from(Export::class, 'i')
             ->where('i.id = :id')
+            ->andWhere('i.status <> 2')
             ->setParameter('id', $id)
             ->getQuery()
             ->getResult();
@@ -49,7 +50,7 @@ class DownloadController extends AbstractController
                         if($status == 'Completed' && property_exists($job, 'DownloadUrl')) {
                             $downloadUrl = $job->DownloadUrl;
                             $expires = new DateTime($job->ExpiryDate);
-                            $export->setStatus(true);
+                            $export->setStatus(1);
                             $export->setDownloadUrl($downloadUrl);
                             $export->setExpires($expires);
                             $em->persist($export);
@@ -86,7 +87,7 @@ class DownloadController extends AbstractController
                         $export->setPublisher($publisher);
                         $export->setId($id);
                         $export->setJobId($jobId);
-                        $export->setStatus(true);
+                        $export->setStatus(1);
                         $export->setDownloadUrl($downloadUrl);
                         $export->setExpires($expires);
                         $em->persist($export);
@@ -97,7 +98,7 @@ class DownloadController extends AbstractController
                         $export->setPublisher($publisher);
                         $export->setId($id);
                         $export->setJobId($jobId);
-                        $export->setStatus(false);
+                        $export->setStatus(0);
                         $em->persist($export);
                         $em->flush();
                         return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download of the original image has been requested. This page will refresh in 10 seconds to check if the download is ready.</body>');

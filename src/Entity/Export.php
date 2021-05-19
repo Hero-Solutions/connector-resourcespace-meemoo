@@ -29,7 +29,7 @@ class Export
     private $jobId;
 
     /**
-     * @ORM\Column(type="boolean")
+     * @ORM\Column(type="int")
      */
     private $status;
 
