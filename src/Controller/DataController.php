@@ -32,26 +32,18 @@ class DataController extends AbstractController
             if($record == null) {
                 return new Response('ERROR: no record data found. Please report this to the system administrator.');
             }
-            $data = $record->GetRecord->record->metadata->children($oaiPmhApi['namespace'], true);
-            $resourceData = $data->xpath($oaiPmhApi['resource_data_xpath']);
-            if($resourceData == null) {
-                return new Response('ERROR: no record data found. Please report this to the system administrator.');
-            }
+            $xml = $record->saveXML();
+            $response = new Response();
+            $filename = str_replace(':', '_', $id) . '.xml';
+            $response->headers->set('Cache-Control', 'private');
+            $response->headers->set('Content-type', 'text/xml');
+            $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '";');
+            $response->headers->set('Content-length', strlen($xml));
+            $response->sendHeaders();
 
-            foreach($resourceData as $data) {
-                $xml = $data->saveXML();
-                $response = new Response();
-                $filename = str_replace(':', '_', $id) . '.xml';
-                $response->headers->set('Cache-Control', 'private');
-                $response->headers->set('Content-type', 'text/xml');
-                $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '";');
-                $response->headers->set('Content-length', strlen($xml));
-                $response->sendHeaders();
+            $response->setContent($xml);
 
-                $response->setContent($xml);
-
-                return $response;
-            }
+            return $response;
         }
         catch(OaipmhException $e) {
             return new Response('ERROR: no record data found. Please report this error to the system administrator: ' . $e);
