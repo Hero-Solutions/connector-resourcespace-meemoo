@@ -42,6 +42,7 @@ class OffloadResourcesCommand extends Command
     private $outputFolder;
     private $templateFile;
     private $templateXsdSchemaFile;
+    private $allImageTypes;
     private $supportedExtensions;
     private $collections;
     private $offloadStatusField;
@@ -158,6 +159,7 @@ class OffloadResourcesCommand extends Command
         }
         $this->relevantMetadataFields[] = 'dcterms_created';
 
+        $this->allImageTypes = $this->params->get('all_image_types');
         $this->supportedExtensions = $this->params->get('supported_extensions');
         $this->mandatoryResourceSpaceFields = $this->params->get('mandatory_resourcespace_fields');
         $this->forbiddenResourceSpaceFields = $this->params->get('forbidden_resourcespace_fields');
@@ -205,24 +207,27 @@ class OffloadResourcesCommand extends Command
                     if ($resourceMetadata != null) {
                         $extension = strtolower(pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION));
                         $failed = false;
-                        if(!in_array($extension, $this->supportedExtensions)) {
+                        if (!in_array($extension, $this->supportedExtensions)) {
                             $failed = true;
-                            if($this->verbose) {
-                                echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has extension "' . $extension . '", which is not supported.' . PHP_EOL;
+                            if(!$this->dryRun) {
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Extension "' . $extension . '" is not supported.');
                             }
+                            echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has extension "' . $extension . '", which is not supported.' . PHP_EOL;
                         }
                         if(!$failed) {
                             foreach ($this->mandatoryResourceSpaceFields as $mandatoryField) {
                                 if (!array_key_exists($mandatoryField, $resourceMetadata)) {
                                     $failed = true;
-                                    if($this->verbose) {
-                                        echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') is missing the mandatory metadata field "' . $mandatoryField . '".' . PHP_EOL;
+                                    if(!$this->dryRun) {
+                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Mandatory field "' . $mandatoryField . '" missing.');
                                     }
+                                    echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') is missing the mandatory metadata field "' . $mandatoryField . '".' . PHP_EOL;
                                 } else if (empty($resourceMetadata[$mandatoryField])) {
                                     $failed = true;
-                                    if($this->verbose) {
-                                        echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has an empty mandatory metadata field "' . $mandatoryField . '".' . PHP_EOL;
+                                    if(!$this->dryRun) {
+                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Mandatory field "' . $mandatoryField . '" is empty.');
                                     }
+                                    echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has an empty mandatory metadata field "' . $mandatoryField . '".' . PHP_EOL;
                                 }
                             }
                         }
@@ -232,6 +237,9 @@ class OffloadResourcesCommand extends Command
                                     foreach($fieldData as $entry) {
                                         if ($resourceMetadata[$forbiddenField] == $entry) {
                                             $failed = true;
+                                            if(!$this->dryRun) {
+                                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Value "' . $entry . '" in field "' . $forbiddenField . '" is not allowed.');
+                                            }
                                             echo 'ERROR: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has value "' . $entry . '" for metadata field "' . $forbiddenField . '", which is not allowed.' . PHP_EOL;
                                         }
                                     }
@@ -280,7 +288,7 @@ class OffloadResourcesCommand extends Command
         $fileModifiedTimestampAsString = null;
 
         if(!$this->forceUpdateMetadata) {
-            // Always offload the file and metadata if offloadstatus is set to 'Offload' or 'Offload but keep original' or 'Offload failed' or 'Failed but keep original'
+            // Always offload the file and metadata if offloadstatus is set to 'Offload', 'Offload but keep original', 'Offload failed' or 'Failed but keep original'
             if (array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
                 $fieldValue = $resourceMetadata[$this->offloadStatusField['key']];
                 if ($fieldValue == $this->offloadStatusField['values']['offload'] || $fieldValue == $this->offloadStatusField['values']['offload_but_keep_original'] || $fieldValue == $this->offloadStatusField['values']['offload_failed'] || $fieldValue == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
@@ -289,7 +297,6 @@ class OffloadResourcesCommand extends Command
             }
             if (!$offloadFile) {
                 // If the file was already offloaded in the past, check when the file was last modified to determine if we need to re-upload it
-                // TODO: test if 'deleting' the original does not lead to a new offload, which shouldn't happen
                 if (array_key_exists('file_modified', $resourceInfo)) {
                     $fileModifiedTimestampAsString = $resourceInfo['file_modified'];
                     if (strlen($fileModifiedTimestampAsString) > 0) {
@@ -297,6 +304,17 @@ class OffloadResourcesCommand extends Command
                         if ($fileModifiedTimestamp > $this->lastOffloadTimestamp) {
                             $offloadFile = true;
                         }
+                    }
+                }
+            }
+            if($offloadFile) {
+                foreach ($this->allImageTypes as $imageType) {
+                    if (preg_match('/^' . $resourceId . $imageType . '_[0-9a-f]+\.jpg$/', $resourceMetadata['originalfilename']) === 1) {
+                        $offloadFile = false;
+                        if ($this->verbose) {
+                            echo 'INFO: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') will not be offloaded, as it is a replacement of an original.' . PHP_EOL;
+                        }
+                        break;
                     }
                 }
             }
@@ -413,6 +431,7 @@ class OffloadResourcesCommand extends Command
             }
         } catch (Exception $e) {
             echo 'ERROR: XML file ' . $xmlFile . ' is not valid:' . PHP_EOL . $e->getMessage() . PHP_EOL;
+            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Invalid XML: ' . $e->getMessage());
         }
         return $validated ? $domDoc : null;
     }
@@ -420,13 +439,13 @@ class OffloadResourcesCommand extends Command
     private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $fileModified, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection)
     {
         $result = true;
+        $statusKey = $this->offloadStatusField['key'];
         // Upload the image file and delete locally, but only if the file has been modified since the last offload (or the file has not been offloaded yet)
         if ($fileModified && $localFilename != null) {
             if (!$this->dryRun) {
                 $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
                 unlink($localFilename);
 
-                $statusKey = $this->offloadStatusField['key'];
                 // Update offload status in ResourceSpace
                 if ($data[$statusKey] == $this->offloadStatusField['values']['offload']
                     || $data[$statusKey] == $this->offloadStatusField['values']['offloaded']
@@ -437,8 +456,9 @@ class OffloadResourcesCommand extends Command
                     || $data[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
                     $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_pending_but_keep_original']);
                 }
+                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
                 // Update offload timestamp (resource) in ResourceSpace
-                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], urlencode(DateTimeUtil::formatTimestampWithTimezone()));
+                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
                 // Upload the XML file and delete locally
                 $this->ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilenameWithoutExtension . '.xml');
             }
@@ -449,12 +469,24 @@ class OffloadResourcesCommand extends Command
                     echo 'Error: no meemoo asset URL for resource ' . $resourceId . PHP_EOL;
                     $result = false;
                 } else {
+                    $pos = strrpos($assetUrl, '/');
+                    $meemooUrl = $this->oaiPmhApi['url'] . '?verb=GetRecord&metadataPrefix=' . $this->oaiPmhApi['metadata_prefix'] . '&identifier=' . substr($assetUrl, $pos + 1);
                     // Compare old & new metadata
-                    $currentMeemooMetadata = $this->getCurrentMeemooMetadata($assetUrl, $collection);
+                    $currentMeemooMetadata = $this->getCurrentMeemooMetadata($meemooUrl, $collection);
                     if($currentMeemooMetadata == null) {
                         echo 'Error: could not fetch existing meemoo metadata for resource ' . $resourceId . PHP_EOL;
                         $result = false;
                     } else {
+                        if(!$this->dryRun) {
+                            if ($data[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
+                            } else if ($data[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
+                            }
+                        }
+
                         $fragmentId = $currentMeemooMetadata['fragment_id'];
                         $oldMetadata = $currentMeemooMetadata['data'];
 
@@ -498,7 +530,7 @@ class OffloadResourcesCommand extends Command
 
             if($result) {
                 // Update offload timestamp (metadata) in ResourceSpace
-                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], urlencode(DateTimeUtil::formatTimestampWithTimezone()));
+                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestampWithTimezone());
 
                 // Update ResourceSpace md5checksum if needed
                 if ($fileModified) {

@@ -98,8 +98,7 @@ class ProcessOffloadedResourcesCommand extends Command
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {
-                    $this->processRecord($collection, $record->metadata->children($oaiPmhApi['namespace'], true),
-                        $oaiPmhApi['url'] . '?verb=GetRecord&metadataPrefix=' . $oaiPmhApi['metadata_prefix'] . '&identifier=' . $record->header->identifier,
+                    $this->processRecord($collection, $record->header->identifier, $record->metadata->children($oaiPmhApi['namespace'], true),
                         $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath']);
                 }
             }
@@ -122,7 +121,7 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function processRecord($collection, $record, $assetUrl, $resourceIdXpath, $mediaIdXpath)
+    private function processRecord($collection, $assetId, $record, $resourceIdXpath, $mediaIdXpath)
     {
         $resourceIds = $record->xpath($resourceIdXpath);
         foreach($resourceIds as $id) {
@@ -133,6 +132,7 @@ class ProcessOffloadedResourcesCommand extends Command
             foreach($mediaIds as $mediaId) {
                 $imageUrl = $this->connectorUrl . 'download/' . $collection . '/' . $mediaId;
             }
+            $assetUrl = $this->connectorUrl . 'data/' . $collection . '/' . $assetId;
 
             $rawResourceData = $this->resourceSpace->getRawResourceFieldData($resourceId);
             if($rawResourceData == null) {
@@ -143,10 +143,8 @@ class ProcessOffloadedResourcesCommand extends Command
                 echo 'ERROR: cannot create link to original image' . PHP_EOL;
             } else {
                 $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
-//                var_dump($resourceMetadata);
 
                 if(!$this->dryRun) {
-                    //TODO use similar approach for asset_url as download, get the asset indirectly through the REST API
                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], urlencode($assetUrl));
                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], urlencode($imageUrl));
 

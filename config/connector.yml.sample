@@ -36,7 +36,7 @@ parameters:
   delete_originals: false
 
   # Sorted from high > low resolution. The highest type image found for a resource will be used as replacement for the original when deleting (replacing) the original.
-  image_types:
+  replacement_image_types:
     - hpr
     - lpr
     - scr
@@ -51,6 +51,15 @@ parameters:
     url: ''
     username: ''
     key: ''
+
+  # All supported alternative image types in ResourceSpace, this is to check if the file to offload is not simply a replacement of an original from a previous offload.
+  all_image_types:
+    - hpr
+    - lpr
+    - scr
+    - pre
+    - thm
+    - thu
 
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
 
@@ -101,6 +110,7 @@ parameters:
     metadata_prefix: 'mets'
     namespace: 'mets'
     media_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/MediaObjectId'
+    fragment_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/FragmentId'
     resource_data_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties'
     resourcespace_id: 'dc_identifier_localid'
     title: 'dc_title'

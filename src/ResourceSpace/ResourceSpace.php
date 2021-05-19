@@ -10,7 +10,7 @@ class ResourceSpace
     private $apiUrl;
     private $apiUsername;
     private $apiKey;
-    private $imageTypes;
+    private $replacementImageTypes;
 
     // All metadata field titles, obtained during the first get_resource_field_data call
     private $metadataFieldTitles = null;
@@ -23,7 +23,7 @@ class ResourceSpace
         $this->apiUrl = $resourceSpaceApi['url'];
         $this->apiUsername = $resourceSpaceApi['username'];
         $this->apiKey = $resourceSpaceApi['key'];
-        $this->imageTypes = $params->get('image_types');
+        $this->replacementImageTypes = $params->get('replacement_image_types');
     }
 
     public function getAllResources($search)
@@ -127,14 +127,14 @@ class ResourceSpace
 
     public function updateField($id, $field, $value, $nodeValue = false)
     {
-        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . str_replace(' ', '+', $value) . '&param4=' . $nodeValue);
+        $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . urlencode($value) . '&param4=' . $nodeValue);
         return json_decode($data, true);
     }
 
     public function replaceOriginal($id)
     {
         $data = false;
-        foreach($this->imageTypes as $imageType) {
+        foreach($this->replacementImageTypes as $imageType) {
             $imageUrl = $this->getResourcePath($id, $imageType, 0);
             if(!empty($imageUrl)) {
                 if(HttpUtil::urlExists($imageUrl)) {
