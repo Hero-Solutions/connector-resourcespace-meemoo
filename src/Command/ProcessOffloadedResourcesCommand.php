@@ -26,6 +26,7 @@ class ProcessOffloadedResourcesCommand extends Command
     private $offloadStatusField;
     private $resourceSpaceMetadataFields;
     private $deleteOriginals;
+    private $connectorUrl;
     private $pendingOffloadFilter;
 
     private $resourcesProcessed;
@@ -70,6 +71,7 @@ class ProcessOffloadedResourcesCommand extends Command
         }
 
         $this->deleteOriginals = $this->params->get('delete_originals');
+        $this->connectorUrl = $this->params->get('connector_url');
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->pendingOffloadFilter = $this->offloadStatusField['values']['offload_pending'];
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
@@ -96,9 +98,9 @@ class ProcessOffloadedResourcesCommand extends Command
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {
-                    $this->processRecord($record->metadata->children($oaiPmhApi['namespace'], true),
+                    $this->processRecord($collection, $record->metadata->children($oaiPmhApi['namespace'], true),
                         $oaiPmhApi['url'] . '?verb=GetRecord&metadataPrefix=' . $oaiPmhApi['metadata_prefix'] . '&identifier=' . $record->header->identifier,
-                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['meemoo_image_url_xpath']);
+                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath']);
                 }
             }
             catch(OaipmhException $e) {
@@ -120,45 +122,45 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function processRecord($record, $assetUrl, $resourceIdXpath, $meemooImageUrlXpath)
+    private function processRecord($collection, $record, $assetUrl, $resourceIdXpath, $mediaIdXpath)
     {
         $resourceIds = $record->xpath($resourceIdXpath);
         foreach($resourceIds as $id) {
             $resourceId = strval($id);
 
-            //Image url is currently not the original image but a derivative of the original.
-            //meemoo does not currently provide a way to access the original image in their filestore.
             $imageUrl = null;
-            $imageUrls = $record->xpath($meemooImageUrlXpath);
-            foreach($imageUrls as $url) {
-                $imageUrl = $url;
+            $mediaIds = $record->xpath($mediaIdXpath);
+            foreach($mediaIds as $mediaId) {
+                $imageUrl = $this->connectorUrl . 'download/' . $collection . '/' . $mediaId;
             }
 
             $rawResourceData = $this->resourceSpace->getRawResourceFieldData($resourceId);
             if($rawResourceData == null) {
                 echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!' . PHP_EOL;
+            } else if($imageUrl == null) {
+                echo 'ERROR: cannot create link to original image' . PHP_EOL;
+            } else if(empty($imageUrl)) {
+                echo 'ERROR: cannot create link to original image' . PHP_EOL;
             } else {
                 $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
 //                var_dump($resourceMetadata);
 
                 if(!$this->dryRun) {
+                    //TODO use similar approach for asset_url as download, get the asset indirectly through the REST API
                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], urlencode($assetUrl));
-                    if($imageUrl != null) {
-                        if(!empty($imageUrl)) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], urlencode($imageUrl));
-                        }
-                    }
+                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], urlencode($imageUrl));
 
                     $statusKey = $this->offloadStatusField['key'];
                     if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
                         || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
+                        if($this->deleteOriginals) {
+                            $this->resourceSpace->replaceOriginal($resourceId);
+                        }
                     } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
                         || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
                     }
-
-                    //TODO 'delete' original. Seems best to implement this when meemoo has a IIIF endpoint so museums can still access their originals.
                 }
                 if($this->verbose) {
                     echo 'Resource ' . $resourceId . ' has been processed.' . PHP_EOL;

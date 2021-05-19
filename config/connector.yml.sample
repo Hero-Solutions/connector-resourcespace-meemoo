@@ -35,6 +35,18 @@ parameters:
   # Whether to actually delete originals (true) or not (false). Set to false when offloading production resources to QAS archive.
   delete_originals: false
 
+  # Sorted from high > low resolution. The highest type image found for a resource will be used as replacement for the original when deleting (replacing) the original.
+  image_types:
+    - hpr
+    - lpr
+    - scr
+    - pre
+    - thm
+    - thu
+
+  # connector_url MUST end with a trailing slash
+  connector_url: 'http://127.0.0.1:8000/'
+
   resourcespace_api:
     url: ''
     username: ''
@@ -88,12 +100,11 @@ parameters:
     url: 'https://archief-qas.viaa.be/mediahaven-oai/oai'
     metadata_prefix: 'mets'
     namespace: 'mets'
-    fragment_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/FragmentId'
+    media_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/MediaObjectId'
     resource_data_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties'
     resourcespace_id: 'dc_identifier_localid'
     title: 'dc_title'
     description: 'dc_description'
-    meemoo_image_url_xpath: 'mets:fileSec/mets:fileGrp/mets:file/@xlink:href'
     credentials:
       DEMUSEUMSTICHTING:
         username: ''

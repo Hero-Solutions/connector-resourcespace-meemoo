@@ -2,6 +2,7 @@
 
 namespace App\ResourceSpace;
 
+use App\Util\HttpUtil;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ResourceSpace
@@ -9,6 +10,7 @@ class ResourceSpace
     private $apiUrl;
     private $apiUsername;
     private $apiKey;
+    private $imageTypes;
 
     // All metadata field titles, obtained during the first get_resource_field_data call
     private $metadataFieldTitles = null;
@@ -21,6 +23,7 @@ class ResourceSpace
         $this->apiUrl = $resourceSpaceApi['url'];
         $this->apiUsername = $resourceSpaceApi['username'];
         $this->apiKey = $resourceSpaceApi['key'];
+        $this->imageTypes = $params->get('image_types');
     }
 
     public function getAllResources($search)
@@ -125,6 +128,27 @@ class ResourceSpace
     public function updateField($id, $field, $value, $nodeValue = false)
     {
         $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . str_replace(' ', '+', $value) . '&param4=' . $nodeValue);
+        return json_decode($data, true);
+    }
+
+    public function replaceOriginal($id)
+    {
+        $data = false;
+        foreach($this->imageTypes as $imageType) {
+            $imageUrl = $this->getResourcePath($id, $imageType, 0);
+            if(!empty($imageUrl)) {
+                if(HttpUtil::urlExists($imageUrl)) {
+                    $data = json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=0&param4=0&param5=0'), true);
+                    break;
+                }
+            }
+        }
+        return $data;
+    }
+
+    public function getResourcePath($id, $type, $filePath, $extension = '')
+    {
+        $data = $this->doApiCall('get_resource_path&param1=' . $id . '&param2=' . $filePath . '&param3=' . $type . '&param5=' . $extension);
         return json_decode($data, true);
     }
 
