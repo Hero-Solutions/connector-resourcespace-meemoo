@@ -2,6 +2,7 @@
 
 namespace App\ResourceSpace;
 
+use App\Util\DateTimeUtil;
 use App\Util\HttpUtil;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
@@ -11,6 +12,7 @@ class ResourceSpace
     private $apiUsername;
     private $apiKey;
     private $replacementImageTypes;
+    private $allImageTypes;
 
     // All metadata field titles, obtained during the first get_resource_field_data call
     private $metadataFieldTitles = null;
@@ -24,6 +26,7 @@ class ResourceSpace
         $this->apiUsername = $resourceSpaceApi['username'];
         $this->apiKey = $resourceSpaceApi['key'];
         $this->replacementImageTypes = $params->get('replacement_image_types');
+        $this->allImageTypes = $params->get('all_image_types');
     }
 
     public function getAllResources($search)
@@ -125,20 +128,33 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
-    public function updateField($id, $field, $value, $nodeValue = false)
+    public function updateField($id, $field, $value, $nodeValue = false, $prependTimestamp = false)
     {
+        if($prependTimestamp) {
+            $value = DateTimeUtil::formatTimestampSimple() . ' - ' . $value;
+        }
         $data = $this->doApiCall('update_field&param1=' . $id . '&param2=' . $field . "&param3=" . urlencode($value) . '&param4=' . $nodeValue);
         return json_decode($data, true);
     }
 
     public function replaceOriginal($id)
     {
-        $data = false;
-        foreach($this->replacementImageTypes as $imageType) {
-            $imageUrl = $this->getResourcePath($id, $imageType, 0);
+        $data = array('status' => false, 'message' => 'No alternative image found, original has not been deleted.');
+        $alreadyReplaced = false;
+        foreach($this->replacementImageTypes as $imgType) {
+            $imageUrl = $this->getResourcePath($id, $imgType, 0);
             if(!empty($imageUrl)) {
-                if(HttpUtil::urlExists($imageUrl)) {
-                    $data = json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=0&param4=0&param5=0'), true);
+                foreach ($this->allImageTypes as $imageType) {
+                    if (preg_match('/^.*\/' . $id . $imageType . '_[0-9a-f]+\.[^.]+$/', $imageUrl) === 1) {
+                        $alreadyReplaced = true;
+                        $data = array('status' => true, 'message' => 'File was already replaced (' . $imageUrl . ').');
+                        break;
+                    }
+                }
+                if($alreadyReplaced) {
+                    break;
+                } else if (HttpUtil::urlExists($imageUrl)) {
+                    $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=0&param4=0&param5=0'), true));
                     break;
                 }
             }
