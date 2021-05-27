@@ -171,6 +171,7 @@ parameters:
   resourcespace_metadata_fields:
     offload_timestamp_resource: 'offloadtime'
     offload_timestamp_metadata: 'offloadtimemeta'
+    offload_error: 'offloaderror'
     meemoo_asset_url: 'linkoffload'
     meemoo_image_url: 'linkoriginal'
 
