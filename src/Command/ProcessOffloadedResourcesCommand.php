@@ -143,17 +143,20 @@ class ProcessOffloadedResourcesCommand extends Command
                 echo 'ERROR: cannot create link to original image' . PHP_EOL;
             } else {
                 $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
+                $statusKey = $this->offloadStatusField['key'];
 
                 if(!$this->dryRun) {
-                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], urlencode($assetUrl));
-                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], urlencode($imageUrl));
+                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
+                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
 
-                    $statusKey = $this->offloadStatusField['key'];
                     if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
                         || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
                         if($this->deleteOriginals) {
-                            $this->resourceSpace->replaceOriginal($resourceId);
+                            $result = $this->resourceSpace->replaceOriginal($resourceId);
+                            if($result['status'] === false) {
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
+                            }
                         }
                     } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
                         || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
@@ -161,9 +164,18 @@ class ProcessOffloadedResourcesCommand extends Command
                     }
                 }
                 if($this->verbose) {
-                    echo 'Resource ' . $resourceId . ' has been processed.' . PHP_EOL;
-                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
+                    echo 'Resource ' . $resourceId . ' has been processed by meemoo.' . PHP_EOL;
+/*                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
                     echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
+                    echo 'Resource ' . $resourceId . ' already has status ' . $resourceMetadata[$statusKey] . PHP_EOL;
+                    $statusKey = $this->offloadStatusField['key'];
+                    if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                        || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                        echo 'Set resource ' . $resourceId . ' status from ' . $resourceMetadata[$statusKey] . ' to ' . $this->offloadStatusField['values']['offloaded'] . PHP_EOL;
+                    } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                        || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
+                        echo 'Set resource ' . $resourceId . ' status from ' . $resourceMetadata[$statusKey] . ' to ' . $this->offloadStatusField['values']['offloaded_but_keep_original'] . PHP_EOL;
+                    }*/
                 }
 
                 if($this->dryRun) {
@@ -195,13 +207,12 @@ class ProcessOffloadedResourcesCommand extends Command
                 if($resourceMetadata != null) {
                     echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
                     if(!$this->dryRun) {
+                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'The resource has not been processed by meemoo.', false, true);
                         if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']) {
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
                             $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
                         } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
+                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
                             $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
                         }
                     }

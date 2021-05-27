@@ -446,12 +446,12 @@ class OffloadResourcesCommand extends Command
         return $validated ? $domDoc : null;
     }
 
-    private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $fileModified, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection)
+    private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection)
     {
         $result = true;
         $statusKey = $this->offloadStatusField['key'];
         // Upload the image file and delete locally, but only if the file has been modified since the last offload (or the file has not been offloaded yet)
-        if ($fileModified && $localFilename != null) {
+        if ($offloadFile && $localFilename != null) {
             if (!$this->dryRun) {
                 $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
                 unlink($localFilename);
@@ -539,7 +539,7 @@ class OffloadResourcesCommand extends Command
                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestampWithTimezone());
 
                 // Update ResourceSpace md5checksum if needed
-                if ($fileModified) {
+                if ($offloadFile) {
                     $updatemd5 = false;
                     if (!array_key_exists('md5checksum', $data)) {
                         $updatemd5 = true;
