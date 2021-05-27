@@ -32,17 +32,9 @@ class DataController extends AbstractController
             if($record == null) {
                 return new Response('ERROR: no record data found. Please report this to the system administrator.');
             }
-            $xml = $record->saveXML();
-            $response = new Response();
-            $filename = str_replace(':', '_', $id) . '.xml';
-            $response->headers->set('Cache-Control', 'private');
-            $response->headers->set('Content-type', 'text/xml');
-            $response->headers->set('Content-Disposition', 'attachment; filename="' . $filename . '";');
-            $response->headers->set('Content-length', strlen($xml));
+            $response = new Response($record->saveXML(), 200);
+            $response->headers->set('Content-type', 'application/xml');
             $response->sendHeaders();
-
-            $response->setContent($xml);
-
             return $response;
         }
         catch(OaipmhException $e) {
