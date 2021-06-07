@@ -137,23 +137,24 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
-    public function replaceOriginal($id)
+    public function replaceOriginal($id, $originalFilename)
     {
         $data = array('status' => false, 'message' => 'No alternative image found, original has not been deleted.');
         $alreadyReplaced = false;
+        foreach ($this->allImageTypes as $imageType) {
+            if (preg_match('/^.*\/' . $id . $imageType . '_[0-9a-f]+\.[^.]+$/', $originalFilename) === 1) {
+                $alreadyReplaced = true;
+                $data = array('status' => true, 'message' => 'File was already replaced (' . $originalFilename . ').');
+                break;
+            }
+        }
+        if($alreadyReplaced) {
+            return $data;
+        }
         foreach($this->replacementImageTypes as $imgType) {
             $imageUrl = $this->getResourcePath($id, $imgType, 0);
             if(!empty($imageUrl)) {
-                foreach ($this->allImageTypes as $imageType) {
-                    if (preg_match('/^.*\/' . $id . $imageType . '_[0-9a-f]+\.[^.]+$/', $imageUrl) === 1) {
-                        $alreadyReplaced = true;
-                        $data = array('status' => true, 'message' => 'File was already replaced (' . $imageUrl . ').');
-                        break;
-                    }
-                }
-                if($alreadyReplaced) {
-                    break;
-                } else if (HttpUtil::urlExists($imageUrl)) {
+                if (HttpUtil::urlExists($imageUrl)) {
                     $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=0&param4=0&param5=0'), true));
                     break;
                 }

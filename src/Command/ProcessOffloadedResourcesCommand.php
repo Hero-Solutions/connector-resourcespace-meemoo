@@ -153,7 +153,7 @@ class ProcessOffloadedResourcesCommand extends Command
                         || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
                         if($this->deleteOriginals) {
-                            $result = $this->resourceSpace->replaceOriginal($resourceId);
+                            $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
                             if($result['status'] === false) {
                                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
                             }
