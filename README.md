@@ -13,9 +13,14 @@ The connector requires the following components (specific installation instructi
 
 ## Preparation
 
-You need to provide a database to use with the connector, this is used to store export jobs and their status, download URL and expiry date.
-A table must be present in this database, called 'exports', according to the following schema:
+You need to provide a database to use with the connector, this is used to store MD5 file checksums to prevent duplicate offloads, export jobs with their status and download URL's with their expiry date.
+Two tables must be present in this database, called 'file_checksums' and 'exports', according to the following schema:
 ```
+CREATE TABLE `file_checksums` (
+    `file_checksum` CHAR(32) NOT NULL,
+    `resource_id` INT UNSIGNED NOT NULL,
+    PRIMARY KEY(file_checksum)
+);
 CREATE TABLE `exports` (
     `publisher` VARCHAR(255) NOT NULL,
 	`id` VARCHAR(255) NOT NULL,
@@ -25,7 +30,7 @@ CREATE TABLE `exports` (
 	`expires` TIMESTAMP NULL DEFAULT NULL
 );
 ```
-Note: status '0' is pending, '1' is completed.
+Note: in table exports, status '0' is pending, '1' is completed.
 
 ## Forking
 
