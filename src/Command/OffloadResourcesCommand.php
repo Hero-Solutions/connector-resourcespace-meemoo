@@ -194,6 +194,7 @@ class OffloadResourcesCommand extends Command
     {
         // Keep track of resource ID's that are already processed to prevent duplicates (duplicates may emerge through different searches)
         $alreadyProcessed = array();
+        $timestamp = time();
 
         // Loop through all collections
         foreach ($this->collections['values'] as $collection) {
@@ -311,7 +312,7 @@ class OffloadResourcesCommand extends Command
 
         if (!$this->dryRun && !$this->forceUpdateMetadata) {
             $file = fopen($this->lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
-            fwrite($file, time());
+            fwrite($file, $timestamp);
             fclose($file);
         }
     }
