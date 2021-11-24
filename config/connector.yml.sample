@@ -167,6 +167,7 @@ parameters:
       offload_pending_but_keep_original: 'Pending but keep original'
       offloaded_but_keep_original: 'Offloaded but keep original'
       offload_failed_but_keep_original: 'Failed but keep original'
+      offloaded_now_delete_original: 'Offloaded now delete original'
 
   resourcespace_metadata_fields:
     offload_timestamp_resource: 'offloadtime'
