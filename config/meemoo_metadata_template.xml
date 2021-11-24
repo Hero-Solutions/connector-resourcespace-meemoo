@@ -71,7 +71,7 @@
 {% elseif resource.description is not empty %}
   <dc_description>{{ resource.description }}</dc_description>
 {% else %}
-  <dc_description>n/a</dc_description>
+  <dc_description></dc_description>
 {% endif %}
 <!-- Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description -->
 {% set description = [] %}
