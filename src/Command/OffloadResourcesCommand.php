@@ -217,17 +217,29 @@ class OffloadResourcesCommand extends Command
                     if ($resourceMetadata != null) {
                         if (array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
                             if ($resourceMetadata[$this->offloadStatusField['key']] == $this->offloadStatusField['values']['offloaded_now_delete_original']) {
-                                echo 'Replacing resource ' . $resourceId . ', as it has status \'Offloaded now delete original\'.' . PHP_EOL;
-                                if (!$this->dryRun) {
-                                    $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offloaded']);
-                                    if ($this->deleteOriginals) {
-                                        $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
-                                        if ($result['status'] === false) {
-                                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
+                                if(!array_key_exists($this->resourceSpaceMetadataFields['meemoo_image_url'], $resourceMetadata)) {
+                                    echo 'Error: cannot replace resource, meemoo original image URL missing.' . PHP_EOL;
+                                    if(!$this->dryRun) {
+                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Error: meemoo original asset URL missing', false, true);
+                                    }
+                                } else if(empty($resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']])) {
+                                    echo 'Error: cannot replace resource, meemoo original image URL missing.' . PHP_EOL;
+                                    if(!$this->dryRun) {
+                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Error: meemoo original asset URL missing', false, true);
+                                    }
+                                } else {
+                                    echo 'Replacing resource ' . $resourceId . ', as it has status \'Offloaded now delete original\'.' . PHP_EOL;
+                                    if (!$this->dryRun) {
+                                        $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offloaded']);
+                                        if ($this->deleteOriginals) {
+                                            $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
+                                            if ($result['status'] === false) {
+                                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
+                                            }
                                         }
                                     }
+                                    continue;
                                 }
-                                continue;
                             }
                         }
 
