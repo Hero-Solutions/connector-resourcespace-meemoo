@@ -64,7 +64,8 @@ class ProcessOffloadedResourcesCommand extends Command
         $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
         if (file_exists($lastTimestampFile)) {
             $file = fopen($lastTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
-            $lastOffloadTimestamp = fgets($file);
+            // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
+            $lastOffloadTimestamp = intval(fgets($file)) - 7200;
             fclose($file);
         } else {
             die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastTimestampFile . "').");

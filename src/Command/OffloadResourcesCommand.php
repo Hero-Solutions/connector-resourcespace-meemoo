@@ -55,6 +55,7 @@ class OffloadResourcesCommand extends Command
     private $conversionTable;
     private $collectionKey;
     private $offloadStatusFilter;
+    private $deleteOriginals;
 
     private $overrideCertificateAuthorityFile;
     private $sslCertificateAuthorityFile;
@@ -100,6 +101,8 @@ class OffloadResourcesCommand extends Command
 
     private function init()
     {
+        $this->deleteOriginals = $this->params->get('delete_originals');
+
         $this->resourceSpace = new ResourceSpace($this->params);
         $this->ftpUtil = new FtpUtil($this->params);
         $this->restApi = new RestApi($this->params);
@@ -183,6 +186,7 @@ class OffloadResourcesCommand extends Command
             $this->offloadValues['offloaded_but_keep_original'],
             $this->offloadValues['offload_failed'],
             $this->offloadValues['offload_failed_but_keep_original'],
+            $this->offloadValues['offloaded_now_delete_original']
         ];
 
         $this->overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
@@ -211,6 +215,22 @@ class OffloadResourcesCommand extends Command
                     // Get this resource's metadata, but only if it has an appropriate offloadStatus
                     $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
                     if ($resourceMetadata != null) {
+                        if (array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
+                            if ($resourceMetadata[$this->offloadStatusField['key']] == $this->offloadStatusField['values']['offloaded_now_delete_original']) {
+                                echo 'Replacing resource ' . $resourceId . ', as it has status \'Offloaded now delete original\'.' . PHP_EOL;
+                                if (!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offloaded']);
+                                    if ($this->deleteOriginals) {
+                                        $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
+                                        if ($result['status'] === false) {
+                                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                        }
+
                         $extension = strtolower(pathinfo($resourceMetadata['originalfilename'], PATHINFO_EXTENSION));
                         $failed = false;
                         if (!in_array($extension, $this->supportedExtensions)) {
@@ -345,24 +365,26 @@ class OffloadResourcesCommand extends Command
             $md5 = $resourceMetadata['md5checksum'];
         }
 
-        // Prevent files with duplicate MD5 checksums from being offloaded
-        $existingChecksums = $this->entityManager->createQueryBuilder()
-            ->select('i')
-            ->from(FileChecksum::class, 'i')
-            ->where('i.fileChecksum = :checksum')
-            ->setParameter('checksum', $md5)
-            ->getQuery()
-            ->getResult();
-        foreach($existingChecksums as $existingChecksum) {
-            $offloadFile = false;
-            echo 'ERROR at resource ' . $resourceId . ': this exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').' . PHP_EOL;
-            if(!$this->dryRun) {
-                $statusKey = $this->offloadStatusField['key'];
-                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', false, true);
-                if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']) {
-                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']) {
-                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+        if($offloadFile) {
+            // Prevent files with duplicate MD5 checksums from being offloaded
+            $existingChecksums = $this->entityManager->createQueryBuilder()
+                ->select('i')
+                ->from(FileChecksum::class, 'i')
+                ->where('i.fileChecksum = :checksum')
+                ->setParameter('checksum', $md5)
+                ->getQuery()
+                ->getResult();
+            foreach ($existingChecksums as $existingChecksum) {
+                $offloadFile = false;
+                echo 'ERROR at resource ' . $resourceId . ': this exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').' . PHP_EOL;
+                if (!$this->dryRun) {
+                    $statusKey = $this->offloadStatusField['key'];
+                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', false, true);
+                    if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']) {
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                    } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']) {
+                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                    }
                 }
             }
         }
