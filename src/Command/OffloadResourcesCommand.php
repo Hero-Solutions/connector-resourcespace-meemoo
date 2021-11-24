@@ -429,7 +429,7 @@ class OffloadResourcesCommand extends Command
         // Initialize metadata template
         if ($this->metadataTemplate == null) {
             $loader = new FilesystemLoader('./');
-            $twig = new Environment($loader);
+            $twig = new Environment($loader, [ 'strict_variables' => true ]);
             try {
                 $this->metadataTemplate = $twig->load($this->templateFile);
             } catch (LoaderError $e) {
@@ -447,20 +447,35 @@ class OffloadResourcesCommand extends Command
             die('Could not initialize Twig template - exiting.');
         }
 
-        $xmlData = $this->metadataTemplate->render(array(
-            'resource' => $data,
-            'resource_id' => $resourceId,
-            'filename' => $uniqueFilename,
-            'collection' => $collection,
-            'md5_hash' => $md5,
-            'creation_date' => str_replace(' ', 'T', $creationDate),
-            'conversion_table' => $this->conversionTable
-        ));
+        $validated = false;
+        try {
+            $xmlData = $this->metadataTemplate->render(array(
+                'resource' => $data,
+                'resource_id' => $resourceId,
+                'filename' => $uniqueFilename,
+                'collection' => $collection,
+                'md5_hash' => $md5,
+                'creation_date' => str_replace(' ', 'T', $creationDate),
+                'conversion_table' => $this->conversionTable
+            ));
+            $validated = true;
+        } catch(Exception $e) {
+            echo 'ERROR: XML file ' . $xmlFile . ' is not valid:' . PHP_EOL . $e->getMessage() . PHP_EOL;
+            if(!$this->dryRun) {
+                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Error: ' . $e->getMessage(), false, true);
+            }
+            $validated = false;
+        }
+
+        if(!$validated) {
+            return null;
+        }
+        $validated = false;
+
         // Remove zero width spaces (no idea how they got there)
         $xmlData = str_replace( '\u200b', '', $xmlData);
         file_put_contents($xmlFile, $xmlData);
 
-        $validated = false;
         try {
             $domDoc = new DOMDocument();
             $domDoc->loadXML($xmlData, LIBXML_NOBLANKS);
