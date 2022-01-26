@@ -155,7 +155,7 @@ class ResourceSpace
             $imageUrl = $this->getResourcePath($id, $imgType, 0);
             if(!empty($imageUrl)) {
                 if (HttpUtil::urlExists($imageUrl)) {
-                    $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=0&param4=0&param5=0'), true));
+                    $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=1&param4=0&param5=0'), true));
                     break;
                 }
             }
