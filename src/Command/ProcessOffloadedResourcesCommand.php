@@ -150,14 +150,14 @@ class ProcessOffloadedResourcesCommand extends Command
                     $existingAssetUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_asset_url']];
                     if(empty($existingAssetUrl)) {
                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
-                    } else {
+                    } else if(strpos($existingAssetUrl, $assetUrl) === false) {
                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . '\n\n' . $assetUrl);
                     }
 
                     $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']];
                     if(empty($existingOriginalUrl)) {
                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
-                    } else {
+                    } else if(strpos($existingOriginalUrl, $imageUrl) === false) {
                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . '\n\n' . $imageUrl);
                     }
 
