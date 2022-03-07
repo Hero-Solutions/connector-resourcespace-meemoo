@@ -137,6 +137,28 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
+    public function updateError($id, $field, $value, $resourceMetadata, $nodeValue = false, $prependTimestamp = false)
+    {
+        $update = true;
+        if(array_key_exists($field, $resourceMetadata)) {
+            if(!empty($resourceMetadata[$field])) {
+                $currentError = $resourceMetadata[$field];
+                if(preg_match('/^[0-9]+-[0-9]+-[0-9]+ [0-9]+:[0-9]+:[0-9]+ - .*$/', $resourceMetadata[$field])) {
+                    $index = strpos($resourceMetadata[$field], ' - ');
+                    $currentError = substr($resourceMetadata[$field], $index + 3);
+                }
+                var_dump($currentError);
+                var_dump($value);
+                if($currentError === $value) {
+                    $update = false;
+                }
+            }
+        }
+        if($update) {
+            $this->updateField($id, $field, $value, $nodeValue, $prependTimestamp);
+        }
+    }
+
     public function replaceOriginal($id, $originalFilename)
     {
         $data = array('status' => false, 'message' => 'No alternative image found, original has not been deleted.');
