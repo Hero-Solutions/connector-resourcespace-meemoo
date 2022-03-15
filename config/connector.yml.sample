@@ -111,6 +111,7 @@ parameters:
     namespace: 'mets'
     media_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/MediaObjectId'
     fragment_id_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/FragmentId'
+    archive_status_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/Internal/ArchiveStatus'
     resource_data_xpath: 'mets:dmdSec/mets:mdWrap/mets:xmlData/MediaHAVEN_external_metadata/MDProperties'
     resourcespace_id: 'dc_identifier_localid'
     title: 'dc_title'
@@ -128,6 +129,9 @@ parameters:
       MOMU:
         username: ''
         password: ''
+    completed_status:
+      - on_tape
+      - completed
 
   # metadata_edit_url and export_url MUST end with a trailing slash
   rest_api:
