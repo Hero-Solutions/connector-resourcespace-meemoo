@@ -57,10 +57,9 @@ class DownloadController extends AbstractController
                             $em->flush();
                             return $this->redirect($downloadUrl);
                         } else if($status === 'Waiting') {
-                            return new Response('<html><head><meta http-equiv="refresh" content="3" /></head><body>Download request of the original image is still pending, please wait...</body>');
+                            return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download request of the original image is still pending, please wait...</body>');
                         } else if($status === 'InProgress') {
-                            $progress = $job->Progress;
-                            return new Response('<html><head><meta http-equiv="refresh" content="3" /></head><body>Download request of the original image is still pending. Please wait... ' . $progress . '% done.</body>');
+                            return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download request of the original image is still pending. Please wait, this may take several minutes.</body>');
                         } else {
                             return new Response('Something went wrong. Please report the following error to the system administrator: ' . $resultJson);
                         }
@@ -106,8 +105,7 @@ class DownloadController extends AbstractController
                         $em->flush();
                         return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download of the original image has been requested, this may take some time. Please wait...</body>');
                     } else if($status === 'InProgress') {
-                        $progress = $job->Progress;
-                        return new Response('<html><head><meta http-equiv="refresh" content="3" /></head><body>Download request of the original image is still pending. Please wait... ' . $progress . '% done.</body>');
+                        return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download request of the original image is still pending. Please wait, this may take several minutes.</body>');
                     } else {
                         return new Response('Something went wrong. Please report the following error to the system administrator: ' . $resultJson);
                     }
