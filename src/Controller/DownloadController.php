@@ -56,8 +56,11 @@ class DownloadController extends AbstractController
                             $em->persist($export);
                             $em->flush();
                             return $this->redirect($downloadUrl);
-                        } else if($status == 'Waiting') {
-                            return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download request of the original image is still pending. This page will refresh in 10 seconds to check if the download is ready.</body>');
+                        } else if($status === 'Waiting') {
+                            return new Response('<html><head><meta http-equiv="refresh" content="3" /></head><body>Download request of the original image is still pending, please wait...</body>');
+                        } else if($status === 'InProgress') {
+                            $progress = $job->Progress;
+                            return new Response('<html><head><meta http-equiv="refresh" content="3" /></head><body>Download request of the original image is still pending. Please wait... ' . $progress . '% done.</body>');
                         } else {
                             return new Response('Something went wrong. Please report the following error to the system administrator: ' . $resultJson);
                         }
@@ -80,7 +83,7 @@ class DownloadController extends AbstractController
                     $job = json_decode($resultJson)[0];
                     $jobId = $job->ExportJobId;
                     $status = $job->Status;
-                    if($status == 'Completed' && property_exists($job, 'DownloadUrl')) {
+                    if($status === 'Completed' && property_exists($job, 'DownloadUrl')) {
                         $downloadUrl = $job->DownloadUrl;
                         $expires = new DateTime($job->ExpiryDate);
                         $export = new Export();
@@ -93,7 +96,7 @@ class DownloadController extends AbstractController
                         $em->persist($export);
                         $em->flush();
                         return $this->redirect($downloadUrl);
-                    } else if($status == 'Waiting') {
+                    } else if($status === 'Waiting') {
                         $export = new Export();
                         $export->setPublisher($publisher);
                         $export->setId($id);
@@ -101,7 +104,10 @@ class DownloadController extends AbstractController
                         $export->setStatus(0);
                         $em->persist($export);
                         $em->flush();
-                        return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download of the original image has been requested. This page will refresh in 10 seconds to check if the download is ready.</body>');
+                        return new Response('<html><head><meta http-equiv="refresh" content="10" /></head><body>Download of the original image has been requested, this may take some time. Please wait...</body>');
+                    } else if($status === 'InProgress') {
+                        $progress = $job->Progress;
+                        return new Response('<html><head><meta http-equiv="refresh" content="3" /></head><body>Download request of the original image is still pending. Please wait... ' . $progress . '% done.</body>');
                     } else {
                         return new Response('Something went wrong. Please report the following error to the system administrator: ' . $resultJson);
                     }
