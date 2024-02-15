@@ -28,6 +28,7 @@ class ProcessOffloadedResourcesCommand extends Command
     private $deleteOriginals;
     private $connectorUrl;
     private $pendingOffloadFilter;
+    private $processError = false;
 
     private $resourcesProcessed;
 
@@ -61,14 +62,30 @@ class ProcessOffloadedResourcesCommand extends Command
     {
         $this->resourceSpace = new ResourceSpace($this->params);
 
-        $lastTimestampFile = $this->params->get('last_offload_timestamp_file');
-        if (file_exists($lastTimestampFile)) {
-            $file = fopen($lastTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastTimestampFile . "').");
+        $lastOffloadTimestampFile = $this->params->get('last_offload_timestamp_file');
+        if (file_exists($lastOffloadTimestampFile)) {
+            $file = fopen($lastOffloadTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
             // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
             $lastOffloadTimestamp = intval(fgets($file)) - 7200;
             fclose($file);
         } else {
-            die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastTimestampFile . "').");
+            die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
+        }
+
+        //Also grab the last processed timestamp in case the OAI-PMH API was having issues
+        $lastProcessedTimestampFile = $this->params->get('last_processed_timestamp_file');
+        if (file_exists($lastProcessedTimestampFile)) {
+            $file = fopen($lastProcessedTimestampFile, "r") or die("ERROR: Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
+            // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
+            $lastProcessedTimestamp = intval(fgets($file)) - 7200;
+            fclose($file);
+        } else {
+            die("ERROR: Unable to locate file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
+        }
+
+        //Use the oldest timestamp
+        if($lastProcessedTimestamp < $lastOffloadTimestamp) {
+            $lastOffloadTimestamp = $lastProcessedTimestamp;
         }
 
         $this->deleteOriginals = $this->params->get('delete_originals');
@@ -85,6 +102,13 @@ class ProcessOffloadedResourcesCommand extends Command
 
         $this->processOaiPmhApi($collections['values'], $lastOffloadDateTime);
         $this->processMissingResources($collections['values'], $collectionKey);
+
+        if(!$this->dryRun && $this->processError === false) {
+            $timestamp = time();
+            $file = fopen($lastProcessedTimestampFile, "w") or die("Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
+            fwrite($file, $timestamp);
+            fclose($file);
+        }
     }
 
     private function processOaiPmhApi($collections, $lastOffloadDateTime)
@@ -109,15 +133,18 @@ class ProcessOffloadedResourcesCommand extends Command
                     echo 'No records to process for ' . $collection . '.' . PHP_EOL;
                 } else {
                     echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
+                    $this->processError = true;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
                 }
             }
             catch(HttpException $e) {
                 echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
+                $this->processError = true;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
             catch(Exception $e) {
                 echo 'OAI-PMH error (3) at collection ' . $collection . ': ' . $e . PHP_EOL;
+                $this->processError = true;
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
