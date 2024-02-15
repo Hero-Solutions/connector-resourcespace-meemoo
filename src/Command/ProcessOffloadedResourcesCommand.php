@@ -158,7 +158,7 @@ class ProcessOffloadedResourcesCommand extends Command
             $resourceId = strval($id);
 
             //Only process ResourceSpace ID's (maybe we should work out a more robust mechanism to detect which resources were offloaded through ResourceSpace)
-            if(preg_match('/^[0-9]+$', $resourceId)) {
+            if(preg_match('/^[0-9]+$/', $resourceId)) {
 
                 $archiveStatus = null;
                 $archiveStatuses = $record->xpath($archiveStatusXpath);
