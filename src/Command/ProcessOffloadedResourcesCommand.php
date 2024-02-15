@@ -157,78 +157,82 @@ class ProcessOffloadedResourcesCommand extends Command
         foreach($resourceIds as $id) {
             $resourceId = strval($id);
 
-            $archiveStatus = null;
-            $archiveStatuses = $record->xpath($archiveStatusXpath);
-            foreach($archiveStatuses as $status) {
-                $archiveStatus = $status;
-            }
-            if($archiveStatus === null || !in_array($archiveStatus, $completedStatuses)) {
-                echo 'ERROR: resource ' . $resourceId . ' has archive status ' . $archiveStatus . PHP_EOL;
-            } else {
-                $imageUrl = null;
-                $mediaIds = $record->xpath($mediaIdXpath);
-                foreach($mediaIds as $mediaId) {
-                    $imageUrl = $this->connectorUrl . 'download/' . $collection . '/' . $mediaId;
+            //Only process ResourceSpace ID's (maybe we should work out a more robust mechanism to detect which resources were offloaded through ResourceSpace)
+            if(preg_match('/^[0-9]+$', $resourceId)) {
+
+                $archiveStatus = null;
+                $archiveStatuses = $record->xpath($archiveStatusXpath);
+                foreach($archiveStatuses as $status) {
+                    $archiveStatus = $status;
                 }
-                $assetUrl = $this->connectorUrl . 'data/' . $collection . '/' . $assetId;
-
-                $rawResourceData = $this->resourceSpace->getRawResourceFieldData($resourceId);
-                if($rawResourceData == null) {
-                    echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!' . PHP_EOL;
-                } else if($imageUrl == null) {
-                    echo 'ERROR: cannot create link to original image' . PHP_EOL;
-                } else if(empty($imageUrl)) {
-                    echo 'ERROR: cannot create link to original image' . PHP_EOL;
+                if($archiveStatus === null || !in_array($archiveStatus, $completedStatuses)) {
+                    echo 'ERROR: resource ' . $resourceId . ' has archive status ' . $archiveStatus . PHP_EOL;
                 } else {
-                    $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
-                    $statusKey = $this->offloadStatusField['key'];
-
-                    if(!$this->dryRun) {
-                        $existingAssetUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_asset_url']];
-                        if(empty($existingAssetUrl)) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
-                        } else if(strpos($existingAssetUrl, $assetUrl) === false) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . '\n\n' . $assetUrl);
-                        }
-
-                        $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']];
-                        if(empty($existingOriginalUrl)) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
-                        } else if(strpos($existingOriginalUrl, $imageUrl) === false) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . '\n\n' . $imageUrl);
-                        }
-
-                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
-                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
-                            if($this->deleteOriginals) {
-                                $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
-                                if($result['status'] === false) {
-                                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
-                                }
-                            }
-                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
-                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
-                        }
+                    $imageUrl = null;
+                    $mediaIds = $record->xpath($mediaIdXpath);
+                    foreach ($mediaIds as $mediaId) {
+                        $imageUrl = $this->connectorUrl . 'download/' . $collection . '/' . $mediaId;
                     }
-                    if($this->verbose) {
-                        echo 'Resource ' . $resourceId . ' has been processed by meemoo.' . PHP_EOL;
-    /*                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
-                        echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
-                        echo 'Resource ' . $resourceId . ' already has status ' . $resourceMetadata[$statusKey] . PHP_EOL;
+                    $assetUrl = $this->connectorUrl . 'data/' . $collection . '/' . $assetId;
+
+                    $rawResourceData = $this->resourceSpace->getRawResourceFieldData($resourceId);
+                    if ($rawResourceData == null) {
+                        echo 'ERROR: Resource ' . $resourceId . ' not found in ResourceSpace!' . PHP_EOL;
+                    } else if ($imageUrl == null) {
+                        echo 'ERROR: cannot create link to original image' . PHP_EOL;
+                    } else if (empty($imageUrl)) {
+                        echo 'ERROR: cannot create link to original image' . PHP_EOL;
+                    } else {
+                        $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
                         $statusKey = $this->offloadStatusField['key'];
-                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
-                            echo 'Set resource ' . $resourceId . ' status from ' . $resourceMetadata[$statusKey] . ' to ' . $this->offloadStatusField['values']['offloaded'] . PHP_EOL;
-                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
-                            echo 'Set resource ' . $resourceId . ' status from ' . $resourceMetadata[$statusKey] . ' to ' . $this->offloadStatusField['values']['offloaded_but_keep_original'] . PHP_EOL;
-                        }*/
-                    }
 
-                    if($this->dryRun) {
-                        $this->resourcesProcessed[] = $resourceId;
+                        if (!$this->dryRun && !empty($resourceMetadata[$statusKey])) {
+                            $existingAssetUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_asset_url']];
+                            if (empty($existingAssetUrl)) {
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
+                            } else if (strpos($existingAssetUrl, $assetUrl) === false) {
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . '\n\n' . $assetUrl);
+                            }
+
+                            $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']];
+                            if (empty($existingOriginalUrl)) {
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
+                            } else if (strpos($existingOriginalUrl, $imageUrl) === false) {
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . '\n\n' . $imageUrl);
+                            }
+
+                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                                || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
+                                if ($this->deleteOriginals) {
+                                    $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
+                                    if ($result['status'] === false) {
+                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
+                                    }
+                                }
+                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                                || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
+                            }
+                        }
+                        if ($this->verbose) {
+                            echo 'Resource ' . $resourceId . ' has been processed by meemoo.' . PHP_EOL;
+        /*                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
+                            echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
+                            echo 'Resource ' . $resourceId . ' already has status ' . $resourceMetadata[$statusKey] . PHP_EOL;
+                            $statusKey = $this->offloadStatusField['key'];
+                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                                || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                                echo 'Set resource ' . $resourceId . ' status from ' . $resourceMetadata[$statusKey] . ' to ' . $this->offloadStatusField['values']['offloaded'] . PHP_EOL;
+                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                                || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
+                                echo 'Set resource ' . $resourceId . ' status from ' . $resourceMetadata[$statusKey] . ' to ' . $this->offloadStatusField['values']['offloaded_but_keep_original'] . PHP_EOL;
+                            }*/
+                        }
+
+                        if ($this->dryRun) {
+                            $this->resourcesProcessed[] = $resourceId;
+                        }
                     }
                 }
             }
