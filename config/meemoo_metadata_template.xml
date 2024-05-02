@@ -33,7 +33,7 @@
   <dc_contributors type="list">
 {% if resource.creator is not empty %}
 {% for creator in resource.creator|split(',') %}
-<!--    <Digitaliseringspartner>{{ creator }}</Digitaliseringspartner> -->
+    <Digitaliseringspartner>{{ creator }}</Digitaliseringspartner>
 {% endfor %}
 {% endif %}
 {% if resource.contributor is not empty %}
@@ -84,6 +84,7 @@
 {% if description is not empty %}
   <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
+<!--
 {% if resource.rightsstatements is not empty or resource.license is not empty %}
   <dc_rights_licenses type="list">
 {% if resource.rightsstatements is not empty %}
@@ -95,6 +96,14 @@
     <multiselect>{{ license }}</multiselect>
 {% endfor %}
 {% endif %}
+  </dc_rights_licenses>
+{% endif %}
+-->
+{% if resource.license is not empty %}
+  <dc_rights_licenses type="list">
+{% for license in attribute(conversion_table.license, resource.license) %}
+    <multiselect>{{ license }}</multiselect>
+{% endfor %}
   </dc_rights_licenses>
 {% endif %}
 {% if resource.copyrightowner is not empty or resource.artworkcopyrightowner is not empty or resource.licensor is not empty %}

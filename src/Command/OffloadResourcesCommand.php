@@ -75,7 +75,7 @@ class OffloadResourcesCommand extends Command
         parent::__construct();
     }
 
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('app:offload-resources')
@@ -87,7 +87,7 @@ class OffloadResourcesCommand extends Command
         $this->verbose = $verbose;
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $this->verbose = $input->getOption('verbose');
         $this->offloadImages();
@@ -574,7 +574,9 @@ class OffloadResourcesCommand extends Command
                     $currentMeemooMetadata = $this->getCurrentMeemooMetadata($meemooUrl, $collection);
                     if($currentMeemooMetadata == null) {
                         echo 'Error: could not fetch existing meemoo metadata for resource ' . $resourceId . PHP_EOL;
-                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'Cannot fetch meemoo asset data.', $data, false, true);
+                        if(!$this->dryRun) {
+                            $this->resourceSpace->updateError($resourceId, $this->errorField, 'Cannot fetch meemoo asset data.', $data, false, true);
+                        }
                         $result = false;
                     } else {
                         if(!$this->dryRun) {
@@ -594,12 +596,13 @@ class OffloadResourcesCommand extends Command
                             echo 'No actual difference in metadata for resource ' . $resourceId . ', skipping.' . PHP_EOL;
                             $result = false;
                         } else {
+                            $descriptiveDifference = [];
                             // If dc_title or dc_description have changed, then Title and Description also need to be updated as separate fields.
                             if (array_key_exists($this->oaiPmhApi['title'], $difference)) {
-                                $difference['Title'] = $difference[$this->oaiPmhApi['title']];
+                                $descriptiveDifference['Title'] = $difference[$this->oaiPmhApi['title']];
                             }
                             if (array_key_exists($this->oaiPmhApi['description'], $difference)) {
-                                $difference['Description'] = $difference[$this->oaiPmhApi['description']];
+                                $descriptiveDifference['Description'] = $difference[$this->oaiPmhApi['description']];
                             }
 
                             // Use 'OVERWRITE' merge strategy for every single item
@@ -607,8 +610,15 @@ class OffloadResourcesCommand extends Command
                             foreach ($difference as $key => $value) {
                                 $mergeStrategies[$key] = 'OVERWRITE';
                             }
+                            foreach ($descriptiveDifference as $key => $value) {
+                                $mergeStrategies[$key] = 'OVERWRITE';
+                            }
 
-                            $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Dynamic' => $difference));
+                            if(!empty($descriptiveDifference)) {
+                                $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Descriptive' => $descriptiveDifference, 'Dynamic' => $difference));
+                            } else {
+                                $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Dynamic' => $difference));
+                            }
 
                             if(!$this->dryRun) {
                                 $result = $this->restApi->updateMetadata($collection, $fragmentId, json_encode($query));
@@ -682,8 +692,9 @@ class OffloadResourcesCommand extends Command
                     ];
                 }
             }
-        } catch(OaipmhException $e) {
+        } catch(Exception $e) {
             echo 'Error fetching ' . $collection . ' OAI-PMH record at ' . $assetUrl . ': ' . $e . PHP_EOL;
+            echo $e . PHP_EOL;
         }
         return $oldData;
     }

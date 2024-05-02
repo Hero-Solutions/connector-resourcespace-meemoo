@@ -26,14 +26,14 @@ class TestProcessOffloadedResourcesCommand extends Command
         parent::__construct();
     }
 
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('app:test-process-offloaded-resources')
             ->setDescription('Checks the status of the last offloaded images. Performs a dry run, does not actually update ResourceSpace metadata or delete resources.');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $verbose = $input->getOption('verbose');
         $cmd = new ProcessOffloadedResourcesCommand($this->params, true);

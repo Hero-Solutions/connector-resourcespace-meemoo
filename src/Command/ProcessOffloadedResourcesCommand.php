@@ -39,7 +39,7 @@ class ProcessOffloadedResourcesCommand extends Command
         parent::__construct();
     }
 
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('app:process-offloaded-resources')
@@ -51,7 +51,7 @@ class ProcessOffloadedResourcesCommand extends Command
         $this->verbose = $verbose;
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $this->verbose = $input->getOption('verbose');
         $this->process();

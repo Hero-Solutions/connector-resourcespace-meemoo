@@ -19,14 +19,14 @@ class TestMetadataModelCommand extends Command
         parent::__construct();
     }
 
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('app:test-metadata')
             ->setDescription('Lists all ResourceSpace resources and generates XML metadata files for the appropriate resources (dry run, does not actually offload images).');
     }
 
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $cmd = new OffloadResourcesCommand($this->params, $this->entityManager, false, true);
         $cmd->setVerbose($input->getOption('verbose'));

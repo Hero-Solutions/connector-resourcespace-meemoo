@@ -105,6 +105,7 @@
               <xs:element minOccurs="0" maxOccurs="unbounded" name="Co-producer" type="xs:string"/>
               <xs:element minOccurs="0" maxOccurs="unbounded" name="Commentator" type="xs:string"/>
               <xs:element minOccurs="0" maxOccurs="unbounded" name="Componist" type="xs:string"/>
+              <xs:element minOccurs="0" maxOccurs="unbounded" name="Digitaliseringspartner" type="xs:string"/>
               <xs:element minOccurs="0" maxOccurs="unbounded" name="Dirigent" type="xs:string"/>
               <xs:element minOccurs="0" maxOccurs="unbounded" name="Fotografie" type="xs:string"/>
               <xs:element minOccurs="0" maxOccurs="unbounded" name="Geluid" type="xs:string"/>
@@ -432,6 +433,8 @@
                     <xs:enumeration value="CC BY-NC-ND-CONTENT"/>
                     <xs:enumeration value="CC BY-NC-SA-METADATA"/>
                     <xs:enumeration value="CC BY-NC-SA-CONTENT"/>
+                    <xs:enumeration value="BEZOEKERTOOL-CONTENT"/>
+                    <xs:enumeration value="BEZOEKERTOOL-METADATA-ALL"/>
                   </xs:restriction>
                 </xs:simpleType>
               </xs:element>
