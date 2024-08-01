@@ -13,6 +13,8 @@ class ResourceSpace
     private $apiKey;
     private $replacementImageTypes;
     private $allImageTypes;
+    private $tmpDownloadFolderPath;
+    private $tmpDownloadFolderUrl;
 
     // All metadata field titles, obtained during the first get_resource_field_data call
     private $metadataFieldTitles = null;
@@ -27,6 +29,8 @@ class ResourceSpace
         $this->apiKey = $resourceSpaceApi['key'];
         $this->replacementImageTypes = $params->get('replacement_image_types');
         $this->allImageTypes = $params->get('all_image_types');
+        $this->tmpDownloadFolderPath = $params->get('tmp_download_folder_path');
+        $this->tmpDownloadFolderUrl = $params->get('tmp_download_folder_url');
     }
 
     public function getAllResources($search)
@@ -164,7 +168,7 @@ class ResourceSpace
         $data = array('status' => false, 'message' => 'No alternative image found, original has not been deleted.');
         $alreadyReplaced = false;
         foreach ($this->allImageTypes as $imageType) {
-            if (preg_match('/^.*\/' . $id . $imageType . '_[0-9a-f]+\.[^.]+$/', $originalFilename) === 1) {
+            if (preg_match('/^.*' . $id . $imageType . '.*$/', $originalFilename) === 1) {
                 $alreadyReplaced = true;
                 $data = array('status' => true, 'message' => 'File was already replaced (' . $originalFilename . ').');
                 break;
@@ -177,7 +181,17 @@ class ResourceSpace
             $imageUrl = $this->getResourcePath($id, $imgType, 0);
             if(!empty($imageUrl)) {
                 if (HttpUtil::urlExists($imageUrl)) {
-                    $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($imageUrl) . '&param3=1&param4=0&param5=0'), true));
+                    //Download the replacement file because ResourceSpace cannot directly replace original files by its own alternative files
+                    $dotPos = strrpos($originalFilename, '.');
+                    if($dotPos === false) {
+                        $filename = $originalFilename;
+                    } else {
+                        $filename = substr($originalFilename, 0, $dotPos);
+                    }
+                    $filename = $id . $imgType . '_' . $filename . '.jpg';
+                    file_put_contents($this->tmpDownloadFolderPath . $filename, fopen($imageUrl, 'r'));
+                    $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($this->tmpDownloadFolderUrl . $filename) . '&param3=1&param4=0&param5=0'), true));
+                    unlink($this->tmpDownloadFolderPath . $filename);
                     break;
                 }
             }

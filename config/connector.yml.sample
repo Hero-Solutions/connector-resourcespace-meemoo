@@ -61,7 +61,11 @@ parameters:
     - thm
     - thu
 
+  tmp_download_folder_path: '/var/www/html/connector-files/'
+  tmp_download_folder_url: 'http://example.com/connector-files/'
+
   last_offload_timestamp_file: 'last_offload_timestamp.txt'
+  last_processed_timestamp_file: 'last_processed_timestamp.txt'
 
   # Certificate Authority (also known as 'cacert') may not work on its own depending on your system and PHP configuration,
   # that's why a cacert.pem is included in this project (from https://curl.haxx.se/docs/caextract.html).
