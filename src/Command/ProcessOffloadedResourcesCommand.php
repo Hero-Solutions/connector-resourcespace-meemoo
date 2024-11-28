@@ -209,7 +209,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                     if ($result['status'] === false) {
                                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
                                     }
-                                    echo 'Replaced resource ' . $resourceId . ' original file: ' . $result['message'] . PHP_EOL;
+                                    echo 'Replaced resource ' . $resourceId . ' original file: ' . json_encode($result['message']) . PHP_EOL;
                                 }
                             } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
                                 || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
