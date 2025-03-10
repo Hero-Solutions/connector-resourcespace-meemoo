@@ -396,11 +396,12 @@ class OffloadResourcesCommand extends Command
                 echo 'ERROR at resource ' . $resourceId . ': this exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').' . PHP_EOL;
                 if (!$this->dryRun) {
                     $statusKey = $this->offloadStatusField['key'];
-                    $this->resourceSpace->updateError($resourceId, $this->errorField, 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', $resourceMetadata, false, true);
                     if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', $resourceMetadata, false, true);
                     } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']) {
                         $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', $resourceMetadata, false, true);
                     }
                 }
             }
