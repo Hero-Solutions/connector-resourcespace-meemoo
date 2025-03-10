@@ -194,14 +194,14 @@ class ProcessOffloadedResourcesCommand extends Command
                             if (empty($existingAssetUrl)) {
                                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
                             } else if (strpos($existingAssetUrl, $assetUrl) === false) {
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . '\n\n' . $assetUrl);
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . '\r\n\r\n' . $assetUrl);
                             }
 
                             $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']];
                             if (empty($existingOriginalUrl)) {
                                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
                             } else if (strpos($existingOriginalUrl, $imageUrl) === false) {
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . '\n\n' . $imageUrl);
+                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . '\r\n\r\n' . $imageUrl);
                             }
 
                             if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
