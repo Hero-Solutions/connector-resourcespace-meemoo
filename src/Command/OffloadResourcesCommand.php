@@ -368,13 +368,16 @@ class OffloadResourcesCommand extends Command
             $calculateMd5 = true;
         }
 
-        $md5 = null;
         $localFilename = null;
         if($calculateMd5) {
             $localFilename = $this->outputFolder . '/' . $uniqueFilename;
             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
             copy($resourceUrl, $localFilename);
             $md5 = md5_file($localFilename);
+
+            if(!$this->dryRun) {
+                $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+            }
         } else {
             $md5 = $resourceMetadata['md5checksum'];
         }
@@ -442,6 +445,8 @@ class OffloadResourcesCommand extends Command
                         }
                     }
                 } else if ($offloadFile) {
+                    unlink($localFilename);
+
                     // Only set status to 'failed' if we actually wanted to offload the file, NOT when we're only updating metadata
                     if (!$this->dryRun) {
                         $statusKey = $this->offloadStatusField['key'];
@@ -635,19 +640,6 @@ class OffloadResourcesCommand extends Command
             if($result) {
                 // Update offload timestamp (metadata) in ResourceSpace
                 $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_metadata'], DateTimeUtil::formatTimestampWithTimezone());
-
-                // Update ResourceSpace md5checksum if needed
-                if ($offloadFile) {
-                    $updatemd5 = false;
-                    if (!array_key_exists('md5checksum', $data)) {
-                        $updatemd5 = true;
-                    } else if ($data['md5checksum'] != $md5) {
-                        $updatemd5 = true;
-                    }
-                    if ($updatemd5) {
-                        $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
-                    }
-                }
             }
         }
         return $result;
