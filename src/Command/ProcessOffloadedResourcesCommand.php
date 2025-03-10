@@ -6,6 +6,7 @@ use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
 use App\Util\OaiPmhApiUtil;
 use DateTime;
+use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Phpoaipmh\Client;
 use Phpoaipmh\Endpoint;
@@ -20,6 +21,7 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 class ProcessOffloadedResourcesCommand extends Command
 {
     private $params;
+    private $entityManager;
     private $dryRun;
     private $verbose;
     private $resourceSpace;
@@ -32,9 +34,10 @@ class ProcessOffloadedResourcesCommand extends Command
 
     private $resourcesProcessed;
 
-    public function __construct(ParameterBagInterface $params, $dryRun = false)
+    public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $dryRun = false)
     {
         $this->params = $params;
+        $this->entityManager = $entityManager;
         $this->dryRun = $dryRun;
         parent::__construct();
     }
@@ -205,7 +208,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                 || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
                                 $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
                                 if ($this->deleteOriginals) {
-                                    $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
+                                    $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
                                     if ($result['status'] === false) {
                                         $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
                                     }

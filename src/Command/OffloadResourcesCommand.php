@@ -234,7 +234,7 @@ class OffloadResourcesCommand extends Command
                                     if (!$this->dryRun) {
                                         $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offloaded']);
                                         if ($this->deleteOriginals) {
-                                            $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
+                                            $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
                                             if ($result['status'] === false) {
                                                 $this->resourceSpace->updateError($resourceId, $this->errorField, $result['message'], $resourceMetadata, false, true);
                                             }

@@ -5,6 +5,7 @@ namespace App\Command;
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
 use DateTime;
+use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Phpoaipmh\Client;
 use Phpoaipmh\Endpoint;
@@ -20,10 +21,12 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 class ReplaceOriginalCommand extends Command
 {
     private $params;
+    private $entityManager;
 
-    public function __construct(ParameterBagInterface $params)
+    public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager)
     {
         $this->params = $params;
+        $this->entityManager = $entityManager;
         parent::__construct();
     }
 
@@ -47,7 +50,7 @@ class ReplaceOriginalCommand extends Command
         $resourceSpace = new ResourceSpace($this->params);
         $rawResourceData = $resourceSpace->getRawResourceFieldData($resourceId);
         $resourceMetadata = $resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
-        $data = $resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename']);
+        $data = $resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
         var_dump($data);
         return 0;
     }

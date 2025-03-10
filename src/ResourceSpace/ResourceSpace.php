@@ -2,8 +2,10 @@
 
 namespace App\ResourceSpace;
 
+use App\Entity\FileChecksum;
 use App\Util\DateTimeUtil;
 use App\Util\HttpUtil;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ResourceSpace
@@ -45,6 +47,11 @@ class ResourceSpace
 
         $resources = json_decode($allResources, true);
         return $resources;
+    }
+
+    public function getResourceMetadata($ref)
+    {
+        return $this->getResourceFieldDataAsAssocArray($this->getRawResourceFieldData($ref));
     }
 
     public function getResourceMetadataIfFieldContains($ref, $fieldName, $filter)
@@ -163,7 +170,7 @@ class ResourceSpace
         }
     }
 
-    public function replaceOriginal($id, $originalFilename)
+    public function replaceOriginal($id, $originalFilename, $entityManager)
     {
         $data = array('status' => false, 'message' => 'No alternative image found, original has not been deleted.');
         $alreadyReplaced = false;
@@ -190,12 +197,28 @@ class ResourceSpace
                     }
                     $filename = $id . $imgType . '_' . $filename . '.jpg';
                     file_put_contents($this->tmpDownloadFolderPath . $filename, fopen($imageUrl, 'r'));
+//                    $url = $this->tmpDownloadFolderUrl . $filename;
+//                    $url = 'https://datahub.herosolutions.be/92132hpr_2018_0045_0001_0002.jpg';
                     $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($this->tmpDownloadFolderUrl . $filename) . '&param3=1&param4=0&param5=0'), true));
                     unlink($this->tmpDownloadFolderPath . $filename);
                     break;
                 }
             }
         }
+
+        //Obtain the new MD5 checksum of the replaced file and store it in the database to prevent
+        //the new replaced file from being offloaded to meemoo
+        $metadata = $this->getResourceMetadata($id);
+        if(array_key_exists('md5checksum', $metadata)) {
+            if(!empty($metadata['md5checsum'])) {
+                $fileChecksum = new FileChecksum();
+                $fileChecksum->setFileChecksum($metadata['md5checksum']);
+                $fileChecksum->setResourceId($id);
+                $entityManager->persist($fileChecksum);
+                $entityManager->flush();
+            }
+        }
+
         return $data;
     }
 
