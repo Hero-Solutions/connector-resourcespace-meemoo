@@ -158,8 +158,8 @@ class ResourceSpace
                     $index = strpos($resourceMetadata[$field], ' - ');
                     $currentError = substr($resourceMetadata[$field], $index + 3);
                 }
-                var_dump($currentError);
-                var_dump($value);
+//                var_dump($currentError);
+//                var_dump($value);
                 if($currentError === $value) {
                     $update = false;
                 }
