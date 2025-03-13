@@ -196,26 +196,27 @@ class ResourceSpace
                         $filename = substr($originalFilename, 0, $dotPos);
                     }
                     $filename = $id . $imgType . '_' . $filename . '.jpg';
-                    file_put_contents($this->tmpDownloadFolderPath . $filename, fopen($imageUrl, 'r'));
-//                    $url = $this->tmpDownloadFolderUrl . $filename;
-//                    $url = 'https://datahub.herosolutions.be/92132hpr_2018_0045_0001_0002.jpg';
-                    $data = array('status' => true, 'message' => json_decode($this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($this->tmpDownloadFolderUrl . $filename) . '&param3=1&param4=0&param5=0'), true));
-                    unlink($this->tmpDownloadFolderPath . $filename);
+                    $filePath = $this->tmpDownloadFolderPath . $filename;
+                    file_put_contents($filePath, fopen($imageUrl, 'r'));
+
+                    $apiCallResult = $this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($filePath) . '&param3=1&param4=0&param5=0');
+                    $data = array('status' => true, 'message' => json_decode($apiCallResult, true));
+
+                    //If replacement was successful, obtain the new MD5 checksum of the replaced file and store it
+                    //in the database to prevent the new replaced file from being offloaded to meemoo
+                    if($apiCallResult) {
+                        $md5 = md5_file($filePath);
+                        $this->updateField($id, 'md5checksum', $md5);
+                        $fileChecksum = new FileChecksum();
+                        $fileChecksum->setFileChecksum($md5);
+                        $fileChecksum->setResourceId($id);
+                        $entityManager->persist($fileChecksum);
+                        $entityManager->flush();
+                    }
+
+                    unlink($filePath);
                     break;
                 }
-            }
-        }
-
-        //Obtain the new MD5 checksum of the replaced file and store it in the database to prevent
-        //the new replaced file from being offloaded to meemoo
-        $metadata = $this->getResourceMetadata($id);
-        if(array_key_exists('md5checksum', $metadata)) {
-            if(!empty($metadata['md5checsum'])) {
-                $fileChecksum = new FileChecksum();
-                $fileChecksum->setFileChecksum($metadata['md5checksum']);
-                $fileChecksum->setResourceId($id);
-                $entityManager->persist($fileChecksum);
-                $entityManager->flush();
             }
         }
 
