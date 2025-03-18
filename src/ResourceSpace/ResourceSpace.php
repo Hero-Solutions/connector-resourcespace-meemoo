@@ -197,14 +197,17 @@ class ResourceSpace
                     }
                     $filename = $id . $imgType . '_' . $filename . '.jpg';
                     $filePath = $this->tmpDownloadFolderPath . $filename;
+                    $fileUrl = $this->tmpDownloadFolderUrl . $filename;
                     file_put_contents($filePath, fopen($imageUrl, 'r'));
 
-                    $apiCallResult = $this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($filePath) . '&param3=1&param4=0&param5=0');
-                    $data = array('status' => true, 'message' => json_decode($apiCallResult, true));
+                    $apiCallResult = $this->doApiCall('replace_resource_file&param1=' . $id . '&param2=' . urlencode($fileUrl) . '&param3=1&param4=0&param5=0');
+                    $resultDecoded = json_decode($apiCallResult, true);
+                    $success = $resultDecoded['Status'] === 'SUCCESS';
+                    $data = array('status' => $success, 'message' => $resultDecoded);
 
                     //If replacement was successful, obtain the new MD5 checksum of the replaced file and store it
                     //in the database to prevent the new replaced file from being offloaded to meemoo
-                    if($apiCallResult) {
+                    if($success) {
                         $md5 = md5_file($filePath);
                         $this->updateField($id, 'md5checksum', $md5);
                         $fileChecksum = new FileChecksum();

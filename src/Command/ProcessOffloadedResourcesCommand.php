@@ -210,7 +210,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                 if ($this->deleteOriginals) {
                                     $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
                                     if ($result['status'] === false) {
-                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], $result['message'], false, true);
+                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Error replacing original: ' . $result['message'], false, true);
                                     }
                                     echo 'Replaced resource ' . $resourceId . ' original file: ' . json_encode($result['message']) . PHP_EOL;
                                 }
