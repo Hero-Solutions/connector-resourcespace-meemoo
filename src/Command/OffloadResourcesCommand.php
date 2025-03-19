@@ -311,7 +311,7 @@ class OffloadResourcesCommand extends Command
                             }
                             if($offloadFile) {
                                 foreach ($this->allImageTypes as $imageType) {
-                                    if (preg_match('/^' . $resourceId . $imageType . '_[0-9a-f]+\.[^.]+$/', $resourceMetadata['originalfilename']) === 1) {
+                                    if (preg_match('/.*' . $resourceId . $imageType . '.*/', $resourceMetadata['originalfilename']) === 1) {
                                         $offloadFile = false;
                                         if ($this->verbose) {
                                             echo 'INFO: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has not been offloaded, as it is a replacement of an original.' . PHP_EOL;
