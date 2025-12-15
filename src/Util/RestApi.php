@@ -29,12 +29,22 @@ class RestApi
         $this->sslCertificateAuthorityFile = $params->get('ssl_certificate_authority_file');
     }
 
-    public function updateMetadata($collection, $fragmentId, $jsonQuery)
+    public function getAccessToken($collection)
     {
         if(!array_key_exists($collection, $this->tokens)) {
             $this->initializeToken($collection);
         }
         if(!array_key_exists($collection, $this->tokens)) {
+            echo 'No valid OAuth token generated!' . PHP_EOL;
+            return null;
+        }
+        return urlencode($this->tokens[$collection]);
+    }
+
+    public function updateMetadata($collection, $fragmentId, $jsonQuery)
+    {
+        $accessToken = $this->getAccessToken($collection);
+        if($accessToken === null) {
             echo 'No valid OAuth token - metadata was not updated!' . PHP_EOL;
             return false;
         }
@@ -47,7 +57,7 @@ class RestApi
             curl_setopt($ch,CURLOPT_CAINFO, $this->sslCertificateAuthorityFile);
             curl_setopt($ch,CURLOPT_CAPATH, $this->sslCertificateAuthorityFile);
         }
-        curl_setopt($ch,CURLOPT_URL, $this->metadataEditUrl . $fragmentId . '?access_token=' . urlencode($this->tokens[$collection]));
+        curl_setopt($ch,CURLOPT_URL, $this->metadataEditUrl . $fragmentId . '?access_token=' . $accessToken);
         curl_setopt($ch,CURLOPT_POST, true);
         curl_setopt($ch,CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
@@ -185,6 +195,7 @@ class RestApi
 
         $resultJson = curl_exec($ch);
         if($resultJson === false) {
+            echo 'Error initializing token: ' . curl_error($ch) . ': ' . curl_errno($ch) . PHP_EOL;
             return 'Error: ' . curl_error($ch) . ': ' . curl_errno($ch);
         }
 

@@ -651,7 +651,7 @@ class OffloadResourcesCommand extends Command
         $oldData = null;
         try {
             if (!isset($this->oaiPmhEndpoints[$collection])) {
-                $this->oaiPmhEndpoints[$collection] = OaiPmhApiUtil::connect($this->oaiPmhApi, $collection, $this->overrideCertificateAuthorityFile, $this->sslCertificateAuthorityFile);
+                $this->oaiPmhEndpoints[$collection] = OaiPmhApiUtil::connect($this->restApi, $this->oaiPmhApi, $collection, $this->overrideCertificateAuthorityFile, $this->sslCertificateAuthorityFile);
             }
             if (isset($this->oaiPmhEndpoints[$collection])) {
                 $urlComponents = parse_url($assetUrl);

@@ -5,6 +5,7 @@ namespace App\Command;
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
 use App\Util\OaiPmhApiUtil;
+use App\Util\RestApi;
 use DateTime;
 use Doctrine\ORM\EntityManagerInterface;
 use Exception;
@@ -32,6 +33,7 @@ class ProcessOffloadedResourcesCommand extends Command
     private $pendingOffloadFilter;
     private $processError = false;
 
+    private $restApi;
     private $resourcesProcessed;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $dryRun = false)
@@ -64,6 +66,7 @@ class ProcessOffloadedResourcesCommand extends Command
     public function process()
     {
         $this->resourceSpace = new ResourceSpace($this->params);
+        $this->restApi = new RestApi($this->params);
 
         $lastOffloadTimestampFile = $this->params->get('last_offload_timestamp_file');
         if (file_exists($lastOffloadTimestampFile)) {
@@ -122,7 +125,7 @@ class ProcessOffloadedResourcesCommand extends Command
 
         foreach($collections as $collection) {
             try {
-                $oaiPmhEndpoint = OaiPmhApiUtil::connect($oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
+                $oaiPmhEndpoint = OaiPmhApiUtil::connect($this->restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {

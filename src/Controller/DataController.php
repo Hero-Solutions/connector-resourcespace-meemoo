@@ -25,9 +25,10 @@ class DataController extends AbstractController
         $overrideCertificateAuthorityFile = $params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $params->get('ssl_certificate_authority_file');
         $oaiPmhApi = $params->get('oai_pmh_api');
+        $restApi = new RestApi($params);
 
         try {
-            $oaiPmhEndpoint = OaiPmhApiUtil::connect($oaiPmhApi, $publisher, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
+            $oaiPmhEndpoint = OaiPmhApiUtil::connect($restApi, $oaiPmhApi, $publisher, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
             $record = $oaiPmhEndpoint->getRecord($id, $oaiPmhApi['metadata_prefix']);
             if($record == null) {
                 return new Response('ERROR: no record data found. Please report this to the system administrator.');

@@ -12,4 +12,5 @@
 .idea/*
 /output/*
 last_offload_timestamp.txt
+last_processed_timestamp.txt
 /.env

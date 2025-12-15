@@ -11,15 +11,19 @@ use Phpoaipmh\HttpAdapter\CurlAdapter;
 
 class OaiPmhApiUtil
 {
-    public static function connect($oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile)
+    public static function connect($restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile)
     {
+        $accessToken = $restApi->getAccessToken($collection);
+
         $oaiPmhEndpoint = null;
         try {
             $curlAdapter = new CurlAdapter();
             $curlOpts = array(
-                CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
-                CURLOPT_USERPWD => $oaiPmhApi['credentials'][$collection]['username'] . ':' . $oaiPmhApi['credentials'][$collection]['password']
+                CURLOPT_HTTPHEADER => [
+                    'Authorization: Bearer ' . $accessToken
+                ]
             );
+
             if ($overrideCertificateAuthorityFile) {
                 $curlOpts[CURLOPT_CAINFO] = $sslCertificateAuthorityFile;
                 $curlOpts[CURLOPT_CAPATH] = $sslCertificateAuthorityFile;
