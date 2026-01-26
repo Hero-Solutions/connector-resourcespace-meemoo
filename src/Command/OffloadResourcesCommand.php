@@ -33,10 +33,10 @@ class OffloadResourcesCommand extends Command
     private $forceUpdateMetadata;
     private $verbose;
 
-    private $ftpUtil;
+    private FtpUtil $ftpUtil;
     private $resourceSpace;
     private $oaiPmhEndpoints = array();
-    private $restApi;
+    private RestApi $restApi;
 
     private $mandatoryResourceSpaceFields;
     private $forbiddenResourceSpaceFields;
@@ -446,7 +446,6 @@ class OffloadResourcesCommand extends Command
                         }
                     }
                 } else if ($offloadFile) {
-                    unlink($localFilename);
 
                     // Only set status to 'failed' if we actually wanted to offload the file, NOT when we're only updating metadata
                     if (!$this->dryRun) {
@@ -463,6 +462,10 @@ class OffloadResourcesCommand extends Command
                     }
                 }
             }
+        }
+
+        if(file_exists($localFilename)) {
+            unlink($localFilename);
         }
     }
 
