@@ -544,7 +544,6 @@ class OffloadResourcesCommand extends Command
         if ($offloadFile && $localFilename != null) {
             if (!$this->dryRun) {
                 $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
-                unlink($localFilename);
 
                 // Store this file checksum in the database to prevent this exact file from being offloaded again
                 $fileChecksum = new FileChecksum();
