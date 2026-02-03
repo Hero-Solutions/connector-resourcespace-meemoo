@@ -2,7 +2,6 @@
 
 namespace App\Util;
 
-use Exception;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class RestApi

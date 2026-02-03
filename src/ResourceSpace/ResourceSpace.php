@@ -5,23 +5,22 @@ namespace App\ResourceSpace;
 use App\Entity\FileChecksum;
 use App\Util\DateTimeUtil;
 use App\Util\HttpUtil;
-use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ResourceSpace
 {
-    private $apiUrl;
-    private $apiUsername;
-    private $apiKey;
-    private $replacementImageTypes;
-    private $allImageTypes;
-    private $tmpDownloadFolderPath;
-    private $tmpDownloadFolderUrl;
+    private string $apiUrl;
+    private string $apiUsername;
+    private string $apiKey;
+    private array $replacementImageTypes;
+    private array $allImageTypes;
+    private string $tmpDownloadFolderPath;
+    private string $tmpDownloadFolderUrl;
 
     // All metadata field titles, obtained during the first get_resource_field_data call
-    private $metadataFieldTitles = null;
+    private ?array $metadataFieldTitles = null;
     // Relevant metadata field titles, a filtering of metadataFieldTitles based on the relevant fields that are passed on the first call of didRelevantMetadataChange()
-    private $relevantMetadataFieldTitles = null;
+    private ?array $relevantMetadataFieldTitles = null;
 
     public function __construct(ParameterBagInterface $params)
     {
@@ -35,7 +34,7 @@ class ResourceSpace
         $this->tmpDownloadFolderUrl = $params->get('tmp_download_folder_url');
     }
 
-    public function getAllResources($search)
+    public function getAllResources($search): mixed
     {
         $allResources = $this->doApiCall('do_search&param1=' . $search);
 
@@ -45,38 +44,30 @@ class ResourceSpace
             return NULL;
         }
 
-        $resources = json_decode($allResources, true);
-        return $resources;
+        return json_decode($allResources, true);
     }
 
-    public function getResourceMetadata($ref)
-    {
-        return $this->getResourceFieldDataAsAssocArray($this->getRawResourceFieldData($ref));
-    }
-
-    public function getResourceMetadataIfFieldContains($ref, $fieldName, $filter)
+    public function getResourceMetadataIfFieldContains($ref, $fieldName, $filter): ?array
     {
         $rawResourceMetadata = $this->getRawResourceFieldData($ref);
         $isValid = false;
-        if($rawResourceMetadata != null) {
-            if(!empty($rawResourceMetadata)) {
+        if(!empty($rawResourceMetadata)) {
 
-                // Initialize metadata field titles if not yet initialized
-                $this->initializeMetadataFields($rawResourceMetadata);
+            // Initialize metadata field titles if not yet initialized
+            $this->initializeMetadataFields($rawResourceMetadata);
 
-                // Check if the field we're interested in (offloadStatus) contains one of the the appropriate values
-                foreach($rawResourceMetadata as $field) {
-                    if($field['name'] == $fieldName) {
-                        $isValid = in_array($field['value'], $filter);
-                        break;
-                    }
+            // Check if the field we're interested in (offloadStatus) contains one of the appropriate values
+            foreach($rawResourceMetadata as $field) {
+                if($field['name'] == $fieldName) {
+                    $isValid = in_array($field['value'], $filter);
+                    break;
                 }
             }
         }
         return $isValid ? $this->getResourceFieldDataAsAssocArray($rawResourceMetadata) : null;
     }
 
-    private function initializeMetadataFields($rawResourceMetadata)
+    private function initializeMetadataFields($rawResourceMetadata): void
     {
         if($this->metadataFieldTitles == null) {
             $this->metadataFieldTitles = array();
@@ -86,7 +77,7 @@ class ResourceSpace
         }
     }
 
-    public function getResourceFieldDataAsAssocArray($data)
+    public function getResourceFieldDataAsAssocArray($data): array
     {
         $result = array();
         foreach ($data as $field) {
@@ -95,7 +86,7 @@ class ResourceSpace
         return $result;
     }
 
-    public function didRelevantMetadataChange($id, $lastOffloadTimestamp, $relevantFields)
+    public function didRelevantMetadataChange($id, $lastOffloadTimestamp, $relevantFields): bool
     {
         // Initialize relevant metadata field titles if not yet initialized
         if($this->relevantMetadataFieldTitles == null) {
@@ -121,25 +112,25 @@ class ResourceSpace
         return $didChange;
     }
 
-    public function getRawResourceFieldData($id)
+    public function getRawResourceFieldData($id): mixed
     {
         $data = $this->doApiCall('get_resource_field_data&param1=' . $id);
         return json_decode($data, true);
     }
 
-    public function getResourceLog($id)
+    public function getResourceLog($id): mixed
     {
         $data = $this->doApiCall('get_resource_log&param1=' . $id);
         return json_decode($data, true);
     }
 
-    public function getResourceUrl($id, $extension)
+    public function getResourceUrl($id, $extension): mixed
     {
         $data = $this->doApiCall('get_resource_path&param1=' . $id . '&param2=0&param5=' . $extension);
         return json_decode($data, true);
     }
 
-    public function updateField($id, $field, $value, $nodeValue = false, $prependTimestamp = false)
+    public function updateField($id, $field, $value, $nodeValue = false, $prependTimestamp = false): mixed
     {
         if($prependTimestamp) {
             $value = DateTimeUtil::formatTimestampSimple() . ' - ' . $value;
@@ -148,7 +139,7 @@ class ResourceSpace
         return json_decode($data, true);
     }
 
-    public function updateError($id, $field, $value, $resourceMetadata, $nodeValue = false, $prependTimestamp = false)
+    public function updateError($id, $field, $value, $resourceMetadata, $nodeValue = false, $prependTimestamp = false): mixed
     {
         $update = true;
         if(array_key_exists($field, $resourceMetadata)) {
@@ -166,11 +157,13 @@ class ResourceSpace
             }
         }
         if($update) {
-            $this->updateField($id, $field, $value, $nodeValue, $prependTimestamp);
+            return $this->updateField($id, $field, $value, $nodeValue, $prependTimestamp);
+        } else {
+            return null;
         }
     }
 
-    public function replaceOriginal($id, $originalFilename, $entityManager)
+    public function replaceOriginal($id, $originalFilename, $entityManager): array
     {
         $data = array('status' => false, 'message' => 'No alternative image found, original has not been deleted.');
         $alreadyReplaced = false;
@@ -226,21 +219,20 @@ class ResourceSpace
         return $data;
     }
 
-    public function getResourcePath($id, $type, $filePath, $extension = '')
+    public function getResourcePath($id, $type, $filePath, $extension = ''): mixed
     {
         $data = $this->doApiCall('get_resource_path&param1=' . $id . '&param2=' . $filePath . '&param3=' . $type . '&param5=' . $extension);
         return json_decode($data, true);
     }
 
-    private function doApiCall($query)
+    private function doApiCall($query): string|false
     {
         $query = 'user=' . str_replace(' ', '+', $this->apiUsername) . '&function=' . $query;
         $url = $this->apiUrl . '?' . $query . '&sign=' . $this->getSign($query);
-        $data = file_get_contents($url);
-        return $data;
+        return file_get_contents($url);
     }
 
-    private function getSign($query)
+    private function getSign($query): string
     {
         return hash('sha256', $this->apiKey . $query);
     }

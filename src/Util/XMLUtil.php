@@ -2,13 +2,12 @@
 
 namespace App\Util;
 
-use DOMXPath;
-
 class XMLUtil
 {
-    public static function convertXmlToArray($domDoc, $xpath, $xpathQuery, $isRootNode = false)
+    public static function convertXmlToArray($domDoc, $xpath, $xpathQuery, $isRootNode = false): array|string
     {
         $jsonData = null;
+        $convertedData = '';
 
         if($xpathQuery != null) {
             $results = $xpath->query($xpathQuery);
@@ -38,7 +37,7 @@ class XMLUtil
         return $convertedData;
     }
 
-    public static function convertRecursively($xmlNode, $parentIsArray)
+    public static function convertRecursively($xmlNode, $parentIsArray): array|string
     {
         $isArray = false;
         if($xmlNode->hasAttributes()) {
@@ -60,7 +59,7 @@ class XMLUtil
                         $arr[$node->nodeName] = $val;
                     }
                 } else if(!empty($val)) {
-                    $arr[] = $val;                        
+                    $arr[] = $val;
                 }
             }
         } else {

@@ -6,21 +6,21 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class FtpUtil
 {
-    private $useSSL;
-    private $ftpUrl;
-    private $ftpPort;
-    private $ftpCredentials;
+    private bool $useSSL;
+    private string $ftpUrl;
+    private int $ftpPort;
+    private array $ftpCredentials;
 
     public function __construct(ParameterBagInterface $params)
     {
         $ftpServer = $params->get('ftp_server');
         $this->useSSL = $ftpServer['use_ssl'];
         $this->ftpUrl = $ftpServer['url'];
-        $this->ftpPort = array_key_exists('port', $ftpServer) ? $ftpServer['port'] : 22;
+        $this->ftpPort = array_key_exists('port', $ftpServer) ? intval($ftpServer['port']) : 22;
         $this->ftpCredentials = $ftpServer['credentials'];
     }
 
-    public function uploadFile($collection, $localFilename, $remoteFilename)
+    public function uploadFile($collection, $localFilename, $remoteFilename): void
     {
         echo 'Copy file ' . $localFilename . PHP_EOL;
         if(!array_key_exists($collection, $this->ftpCredentials)) {

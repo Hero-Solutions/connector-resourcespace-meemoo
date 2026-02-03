@@ -21,20 +21,19 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ProcessOffloadedResourcesCommand extends Command
 {
-    private $params;
-    private $entityManager;
-    private $dryRun;
-    private $verbose;
-    private $resourceSpace;
-    private $offloadStatusField;
-    private $resourceSpaceMetadataFields;
-    private $deleteOriginals;
-    private $connectorUrl;
-    private $pendingOffloadFilter;
-    private $processError = false;
+    private ParameterBagInterface $params;
+    private EntityManagerInterface $entityManager;
+    private bool $dryRun;
+    private bool $verbose;
+    private ResourceSpace $resourceSpace;
+    private array $offloadStatusField;
+    private array $resourceSpaceMetadataFields;
+    private bool $deleteOriginals;
+    private string $connectorUrl;
+    private bool $processError = false;
 
-    private $restApi;
-    private $resourcesProcessed;
+    private RestApi $restApi;
+    private array $resourcesProcessed;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $dryRun = false)
     {
@@ -51,7 +50,7 @@ class ProcessOffloadedResourcesCommand extends Command
             ->setDescription('Checks the status of the last offloaded images and deletes originals if successful. NOTE: deleting of originals is not yet supported at this time!');
     }
 
-    public function setVerbose($verbose)
+    public function setVerbose($verbose): void
     {
         $this->verbose = $verbose;
     }
@@ -63,7 +62,7 @@ class ProcessOffloadedResourcesCommand extends Command
         return 0;
     }
 
-    public function process()
+    public function process(): void
     {
         $this->resourceSpace = new ResourceSpace($this->params);
         $this->restApi = new RestApi($this->params);
@@ -97,7 +96,6 @@ class ProcessOffloadedResourcesCommand extends Command
         $this->deleteOriginals = $this->params->get('delete_originals');
         $this->connectorUrl = $this->params->get('connector_url');
         $this->offloadStatusField = $this->params->get('offload_status_field');
-        $this->pendingOffloadFilter = $this->offloadStatusField['values']['offload_pending'];
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
         $collections = $this->params->get('collections');
         $collectionKey = $collections['key'];
@@ -117,7 +115,7 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function processOaiPmhApi($collections, $lastOffloadDateTime)
+    private function processOaiPmhApi($collections, $lastOffloadDateTime): void
     {
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
@@ -157,7 +155,7 @@ class ProcessOffloadedResourcesCommand extends Command
     }
 
     private function processRecord($collection, $assetId, $record,
-                                   $resourceIdXpath, $mediaIdXpath, $archiveStatusXpath, $completedStatuses)
+                                   $resourceIdXpath, $mediaIdXpath, $archiveStatusXpath, $completedStatuses): void
     {
         $resourceIds = $record->xpath($resourceIdXpath);
         foreach($resourceIds as $id) {
@@ -246,13 +244,13 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function processMissingResources($collections, $collectionKey)
+    private function processMissingResources($collections, $collectionKey): void
     {
         $offloadStatusFilter = array($this->offloadStatusField['values']['offload_pending'], $this->offloadStatusField['values']['offload_pending_but_keep_original']);
 
         // Loop through all collections
         foreach($collections as $collection) {
-            $allResources = $this->resourceSpace->getAllResources($collectionKey, $collection);
+            $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $collectionKey . ':' . $collection . '"'));
             // Loop through all resources in this collection
             foreach($allResources as $resourceInfo) {
                 $resourceId = $resourceInfo['ref'];

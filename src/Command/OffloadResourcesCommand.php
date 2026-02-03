@@ -2,7 +2,6 @@
 
 namespace App\Command;
 
-use App\Entity\Export;
 use App\Entity\FileChecksum;
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
@@ -14,7 +13,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use DOMDocument;
 use DOMXPath;
 use Exception;
-use Phpoaipmh\Exception\OaipmhException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -24,47 +22,47 @@ use Twig\Error\LoaderError;
 use Twig\Error\RuntimeError;
 use Twig\Error\SyntaxError;
 use Twig\Loader\FilesystemLoader;
+use Twig\TemplateWrapper;
 
 class OffloadResourcesCommand extends Command
 {
-    private $params;
-    private $entityManager;
-    private $dryRun;
-    private $forceUpdateMetadata;
-    private $verbose;
+    private ParameterBagInterface $params;
+    private EntityManagerInterface $entityManager;
+    private bool $dryRun;
+    private bool $forceUpdateMetadata;
+    private bool $verbose;
 
     private FtpUtil $ftpUtil;
-    private $resourceSpace;
-    private $oaiPmhEndpoints = array();
+    private ResourceSpace $resourceSpace;
+    private array $oaiPmhEndpoints = array();
     private RestApi $restApi;
 
-    private $mandatoryResourceSpaceFields;
-    private $forbiddenResourceSpaceFields;
-    private $relevantResourceSpaceFields;
-    private $relevantMetadataFields;
-    private $lastTimestampFile;
-    private $outputFolder;
-    private $templateFile;
-    private $templateXsdSchemaFile;
-    private $allImageTypes;
-    private $supportedExtensions;
-    private $collections;
-    private $offloadStatusField;
-    private $resourceSpaceMetadataFields;
-    private $errorField;
-    private $offloadValues;
-    private $conversionTable;
-    private $collectionKey;
-    private $offloadStatusFilter;
-    private $deleteOriginals;
+    private array $mandatoryResourceSpaceFields;
+    private array $forbiddenResourceSpaceFields;
+    private array $relevantResourceSpaceFields;
+    private array $relevantMetadataFields;
+    private string $lastTimestampFile;
+    private string $outputFolder;
+    private string $templateFile;
+    private string $templateXsdSchemaFile;
+    private array $allImageTypes;
+    private array $supportedExtensions;
+    private array $collections;
+    private array $offloadStatusField;
+    private array $resourceSpaceMetadataFields;
+    private string $errorField;
+    private array $conversionTable;
+    private string $collectionKey;
+    private array $offloadStatusFilter;
+    private bool $deleteOriginals;
 
-    private $overrideCertificateAuthorityFile;
-    private $sslCertificateAuthorityFile;
-    private $oaiPmhApi;
+    private bool $overrideCertificateAuthorityFile;
+    private string $sslCertificateAuthorityFile;
+    private array $oaiPmhApi;
 
-    private $lastOffloadTimestamp;
-    private $lastMetadataTemplateChange;
-    private $metadataTemplate;
+    private int $lastOffloadTimestamp;
+    private int $lastMetadataTemplateChange;
+    private ?TemplateWrapper $metadataTemplate;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $forceUpdate = false, $dryRun = false)
     {
@@ -82,7 +80,7 @@ class OffloadResourcesCommand extends Command
             ->setDescription('Lists all ResourceSpace resources and offloads all images with the appropriate metadata onto an FTP server. Also updates changed metadata of existing resources in meemoo\'s archive.');
     }
 
-    public function setVerbose($verbose)
+    public function setVerbose(bool $verbose): void
     {
         $this->verbose = $verbose;
     }
@@ -90,17 +88,17 @@ class OffloadResourcesCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $this->verbose = $input->getOption('verbose');
-        $this->offloadImages();
-        return 0;
+        return $this->offloadImages();
     }
 
-    public function offloadImages()
+    public function offloadImages(): int
     {
         $this->init();
         $this->processCollections();
+        return 0;
     }
 
-    private function init()
+    private function init(): void
     {
         $this->deleteOriginals = $this->params->get('delete_originals');
 
@@ -112,7 +110,7 @@ class OffloadResourcesCommand extends Command
         $this->lastTimestampFile = $this->params->get('last_offload_timestamp_file');
         if (file_exists($this->lastTimestampFile)) {
             $file = fopen($this->lastTimestampFile, "r") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
-            $this->lastOffloadTimestamp = fgets($file);
+            $this->lastOffloadTimestamp = intval(fgets($file));
             fclose($file);
         }
 
@@ -176,19 +174,19 @@ class OffloadResourcesCommand extends Command
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
         $this->errorField = $this->resourceSpaceMetadataFields['offload_error'];
-        $this->offloadValues = $this->offloadStatusField['values'];
+        $offloadValues = $this->offloadStatusField['values'];
         $this->conversionTable = $this->params->get('conversion_table');
 
         $this->collectionKey = $this->collections['key'];
 
         $this->offloadStatusFilter = [
-            $this->offloadValues['offload'],
-            $this->offloadValues['offload_but_keep_original'],
-            $this->offloadValues['offloaded'],
-            $this->offloadValues['offloaded_but_keep_original'],
-            $this->offloadValues['offload_failed'],
-            $this->offloadValues['offload_failed_but_keep_original'],
-            $this->offloadValues['offloaded_now_delete_original']
+            $offloadValues['offload'],
+            $offloadValues['offload_but_keep_original'],
+            $offloadValues['offloaded'],
+            $offloadValues['offloaded_but_keep_original'],
+            $offloadValues['offload_failed'],
+            $offloadValues['offload_failed_but_keep_original'],
+            $offloadValues['offloaded_now_delete_original']
         ];
 
         $this->overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
@@ -196,7 +194,7 @@ class OffloadResourcesCommand extends Command
         $this->oaiPmhApi = $this->params->get('oai_pmh_api');
     }
 
-    private function processCollections()
+    private function processCollections(): void
     {
         // Keep track of resource ID's that are already processed to prevent duplicates (duplicates may emerge through different searches)
         $alreadyProcessed = array();
@@ -351,7 +349,7 @@ class OffloadResourcesCommand extends Command
         }
     }
 
-    private function processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension, $offloadFile, $fileModifiedTimestampAsString)
+    private function processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension, $offloadFile, $fileModifiedTimestampAsString): void
     {
         // For debugging purposes
 //        var_dump($resourceMetadata);
@@ -469,7 +467,7 @@ class OffloadResourcesCommand extends Command
         }
     }
 
-    private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate)
+    private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate): ?DOMDocument
     {
         // Initialize metadata template
         if ($this->metadataTemplate == null) {
@@ -477,13 +475,7 @@ class OffloadResourcesCommand extends Command
             $twig = new Environment($loader, [ 'strict_variables' => true ]);
             try {
                 $this->metadataTemplate = $twig->load($this->templateFile);
-            } catch (LoaderError $e) {
-                echo 'ERROR initializing Twig template: ' . $e . PHP_EOL;
-                $this->metadataTemplate = null;
-            } catch (RuntimeError $e) {
-                echo 'ERROR initializing Twig template: ' . $e . PHP_EOL;
-                $this->metadataTemplate = null;
-            } catch (SyntaxError $e) {
+            } catch (LoaderError|RuntimeError|SyntaxError $e) {
                 echo 'ERROR initializing Twig template: ' . $e . PHP_EOL;
                 $this->metadataTemplate = null;
             }
@@ -492,7 +484,7 @@ class OffloadResourcesCommand extends Command
             die('Could not initialize Twig template - exiting.');
         }
 
-        $validated = false;
+        $xmlData = null;
         try {
             $xmlData = $this->metadataTemplate->render(array(
                 'resource' => $data,
@@ -521,6 +513,7 @@ class OffloadResourcesCommand extends Command
         $xmlData = str_replace( '\u200b', '', $xmlData);
         file_put_contents($xmlFile, $xmlData);
 
+        $domDoc = null;
         try {
             $domDoc = new DOMDocument();
             $domDoc->loadXML($xmlData, LIBXML_NOBLANKS);
@@ -536,7 +529,7 @@ class OffloadResourcesCommand extends Command
         return $validated ? $domDoc : null;
     }
 
-    private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection)
+    private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection): bool
     {
         $result = true;
         $statusKey = $this->offloadStatusField['key'];
@@ -648,7 +641,7 @@ class OffloadResourcesCommand extends Command
         return $result;
     }
 
-    private function getCurrentMeemooMetadata($assetUrl, $collection)
+    private function getCurrentMeemooMetadata($assetUrl, $collection): ?array
     {
         $oldData = null;
         try {
@@ -678,9 +671,7 @@ class OffloadResourcesCommand extends Command
                 foreach ($results as $result) {
                     $fragmentId = $result->nodeValue;
                 }
-                if (empty($fragmentId)) {
-                    $oldData = null;
-                } else {
+                if (!empty($fragmentId)) {
                     $oldData = [
                         'fragment_id' => $fragmentId,
                         'data' => XMLUtil::convertXmlToArray($domDoc, $xpath, $this->oaiPmhApi['resource_data_xpath'])
@@ -694,7 +685,7 @@ class OffloadResourcesCommand extends Command
         return $oldData;
     }
 
-    private function filterRelevantFields($metadata)
+    private function filterRelevantFields($metadata): array
     {
         $newObject = array();
         foreach($metadata as $key => $value) {
@@ -705,14 +696,14 @@ class OffloadResourcesCommand extends Command
         return $newObject;
     }
 
-    private function getDifference($oldMetadata, $newMetadata)
+    private function getDifference($oldMetadata, $newMetadata): array
     {
         $difference = array();
         foreach($oldMetadata as $key => $value) {
             if(!array_key_exists($key, $newMetadata)) {
                 $isArr = false;
-                if(is_array($oldMetadata[$key])) {
-                    foreach($oldMetadata[$key] as $k => $v) {
+                if(is_array($value)) {
+                    foreach($value as $k => $v) {
                         $difference[$key][$k] = array();
                         $isArr = true;
                     }

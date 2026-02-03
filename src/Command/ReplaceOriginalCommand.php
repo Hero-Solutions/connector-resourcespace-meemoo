@@ -20,8 +20,8 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ReplaceOriginalCommand extends Command
 {
-    private $params;
-    private $entityManager;
+    private ParameterBagInterface $params;
+    private EntityManagerInterface $entityManager;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager)
     {

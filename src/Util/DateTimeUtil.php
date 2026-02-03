@@ -4,7 +4,7 @@ namespace App\Util;
 
 class DateTimeUtil
 {
-    public static function formatTimestampWithTimezone($unixTimestamp = null)
+    public static function formatTimestampWithTimezone($unixTimestamp = null): string|false
     {
         if($unixTimestamp == null) {
             return gmdate("Y-m-d\TH:i:s\Z");
@@ -13,7 +13,7 @@ class DateTimeUtil
         }
     }
 
-    public static function formatTimestampSimple($unixTimestamp = null)
+    public static function formatTimestampSimple($unixTimestamp = null): string|false
     {
         if($unixTimestamp == null) {
             return gmdate("Y-m-d H:i:s");

@@ -11,7 +11,7 @@ use Phpoaipmh\HttpAdapter\CurlAdapter;
 
 class OaiPmhApiUtil
 {
-    public static function connect($restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile)
+    public static function connect($restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile): ?Endpoint
     {
         $accessToken = $restApi->getAccessToken($collection);
 
