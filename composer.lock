@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d21221d71bb5232fa3c23302f8bc55c6",
+    "content-hash": "6971c54f37d98cba4dbd9e6997dfb797",
     "packages": [
         {
             "name": "caseyamcl/phpoaipmh",
