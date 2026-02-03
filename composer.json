@@ -2,10 +2,10 @@
     "type": "project",
     "license": "proprietary",
     "require": {
-        "php": ">=7.4",
+        "php": ">=8.0",
         "ext-ctype": "*",
         "ext-curl": "*",
-        "ext-dom": "20031129",
+        "ext-dom": "*",
         "ext-iconv": "*",
         "ext-json": "*",
         "ext-libxml": "*",

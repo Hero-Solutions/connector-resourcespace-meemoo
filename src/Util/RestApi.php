@@ -7,15 +7,15 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class RestApi
 {
-    private $authUrl;
-    private $metadataEditUrl;
-    private $exportUrl;
-    private $credentials;
+    private string $authUrl;
+    private string $metadataEditUrl;
+    private string $exportUrl;
+    private array $credentials;
 
-    private $overrideCertificateAuthorityFile;
-    private $sslCertificateAuthorityFile;
+    private bool $overrideCertificateAuthorityFile;
+    private string $sslCertificateAuthorityFile;
 
-    private $tokens = array();
+    private array $tokens = array();
 
     public function __construct(ParameterBagInterface $params)
     {
@@ -29,7 +29,7 @@ class RestApi
         $this->sslCertificateAuthorityFile = $params->get('ssl_certificate_authority_file');
     }
 
-    public function getAccessToken($collection)
+    public function getAccessToken($collection): ?string
     {
         if(!array_key_exists($collection, $this->tokens)) {
             $this->initializeToken($collection);
@@ -41,7 +41,7 @@ class RestApi
         return urlencode($this->tokens[$collection]);
     }
 
-    public function updateMetadata($collection, $fragmentId, $jsonQuery)
+    public function updateMetadata($collection, $fragmentId, $jsonQuery): bool
     {
         $accessToken = $this->getAccessToken($collection);
         if($accessToken === null) {
@@ -79,7 +79,7 @@ class RestApi
         return $result;
     }
 
-    public function requestExportJob($collection, $id)
+    public function requestExportJob($collection, $id): array
     {
         $resultJson = 'ERROR';
         if(!array_key_exists($collection, $this->tokens)) {
@@ -128,7 +128,7 @@ class RestApi
         );
     }
 
-    public function checkExportJobStatus($collection, $jobId)
+    public function checkExportJobStatus($collection, $jobId): array
     {
         $resultJson = 'ERROR';
         if(!array_key_exists($collection, $this->tokens)) {
@@ -173,7 +173,7 @@ class RestApi
         );
     }
 
-    private function initializeToken($collection)
+    private function initializeToken($collection): string|bool
     {
         $ch = curl_init();
         if ($ch === false) {
