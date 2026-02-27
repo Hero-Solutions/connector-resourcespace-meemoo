@@ -5,6 +5,7 @@ namespace App\Controller;
 use App\Util\OaiPmhApiUtil;
 use App\Util\RestApi;
 use Exception;
+use Phpoaipmh\Exception\OaipmhException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -50,6 +51,11 @@ final class DataController extends AbstractController
                 $record->saveXML(),
                 Response::HTTP_OK,
                 ['Content-Type' => 'application/xml']
+            );
+        } catch(OaipmhException $e) {
+            return new Response(
+                'ERROR: no record data found. Please report this error to the system administrator: ' . $e,
+                Response::HTTP_NOT_FOUND
             );
         } catch (Exception $e) {
             return new Response(
