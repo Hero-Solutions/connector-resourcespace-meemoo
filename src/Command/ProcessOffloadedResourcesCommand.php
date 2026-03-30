@@ -190,41 +190,67 @@ class ProcessOffloadedResourcesCommand extends Command
                         $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
                         $statusKey = $this->offloadStatusField['key'];
 
-                        if (!$this->dryRun && !empty($resourceMetadata[$statusKey])) {
+                        $updatedMetadata = false;
+                        $updatedStatus = false;
+
+                        if (!empty($resourceMetadata[$statusKey])) {
                             $existingAssetUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_asset_url']];
                             if (empty($existingAssetUrl)) {
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
-                            } else if (strpos($existingAssetUrl, $assetUrl) === false) {
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . PHP_EOL . PHP_EOL . $assetUrl);
+                                $updatedMetadata = true;
+                                if(!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
+                                }
+                            } else if (!str_contains($existingAssetUrl, $assetUrl)) {
+                                $updatedMetadata = true;
+                                if(!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . PHP_EOL . PHP_EOL . $assetUrl);
+                                }
                             }
 
                             $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']];
                             if (empty($existingOriginalUrl)) {
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
-                            } else if (strpos($existingOriginalUrl, $imageUrl) === false) {
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . PHP_EOL . PHP_EOL . $imageUrl);
+                                $updatedMetadata = true;
+                                if(!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
+                                }
+                            } else if (!str_contains($existingOriginalUrl, $imageUrl)) {
+                                $updatedMetadata = true;
+                                if(!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . PHP_EOL . PHP_EOL . $imageUrl);
+                                }
                             }
 
-                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
+                                || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
                                 || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
-                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
-                                if ($this->deleteOriginals) {
-                                    $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
-                                    if ($result['status'] === false) {
-                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Error replacing original: ' . $result['message'], false, true);
-                                    } else {
-                                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
+                                $updatedStatus = true;
+                                if(!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded']);
+                                    if ($this->deleteOriginals) {
+                                        $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
+                                        if ($result['status'] === false) {
+                                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Error replacing original: ' . $result['message'], false, true);
+                                        } else {
+                                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
+                                        }
+                                        echo 'Replaced resource ' . $resourceId . ' original file: ' . json_encode($result['message']) . PHP_EOL;
                                     }
-                                    echo 'Replaced resource ' . $resourceId . ' original file: ' . json_encode($result['message']) . PHP_EOL;
                                 }
-                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original'] || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                                || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
                                 || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']) {
-                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
-                                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
+                                $updatedStatus = true;
+                                if(!$this->dryRun) {
+                                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original']);
+                                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], '');
+                                }
                             }
                         }
                         if ($this->verbose) {
-                            echo 'Resource ' . $resourceId . ' has been processed by meemoo.' . PHP_EOL;
+                            echo ($this->dryRun ? ' DRY RUN - ' : '') . 'Resource ' . $resourceId . ' has been processed by meemoo'
+                                . ($updatedStatus ? ' - updated status' : ' - no-op status')
+                                . ($updatedMetadata ? ' - updated metadata' : ' - no-op metadata')
+                                . PHP_EOL;
         /*                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
                             echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
                             echo 'Resource ' . $resourceId . ' already has status ' . $resourceMetadata[$statusKey] . PHP_EOL;
