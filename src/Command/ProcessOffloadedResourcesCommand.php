@@ -247,7 +247,8 @@ class ProcessOffloadedResourcesCommand extends Command
                             }
                         }
                         if ($this->verbose) {
-                            echo ($this->dryRun ? ' DRY RUN - ' : '') . 'Resource ' . $resourceId . ' has been processed by meemoo'
+                            echo ($this->dryRun ? ' DRY RUN - ' : '')
+                                . 'Resource ' . $resourceId . ' has been processed by meemoo'
                                 . ($updatedStatus ? ' - updated status' : ' - no-op status')
                                 . ($updatedMetadata ? ' - updated metadata' : ' - no-op metadata')
                                 . PHP_EOL;
