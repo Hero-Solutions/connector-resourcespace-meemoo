@@ -7,46 +7,48 @@ use Phpoaipmh\Client;
 use Phpoaipmh\Endpoint;
 use Phpoaipmh\Exception\HttpException;
 use Phpoaipmh\Exception\OaipmhException;
-use Phpoaipmh\HttpAdapter\CurlAdapter;
 
 class OaiPmhApiUtil
 {
     public static function connect($restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile): ?Endpoint
     {
-        $accessToken = $restApi->getAccessToken($collection);
-
-        $oaiPmhEndpoint = null;
         try {
-            $curlAdapter = new CurlAdapter();
-            $curlOpts = array(
-                CURLOPT_HTTPHEADER => [
-                    'Authorization: Bearer ' . $accessToken
-                ]
-            );
+            if (!$restApi->ensureValidAccessToken($collection)) {
+                echo 'No valid OAuth token generated!' . PHP_EOL;
+                return null;
+            }
+
+            $curlOpts = [
+                CURLOPT_CONNECTTIMEOUT => 10,
+                CURLOPT_TIMEOUT => 120,
+                CURLOPT_RETURNTRANSFER => true,
+            ];
 
             if ($overrideCertificateAuthorityFile) {
                 $curlOpts[CURLOPT_CAINFO] = $sslCertificateAuthorityFile;
-                $curlOpts[CURLOPT_CAPATH] = $sslCertificateAuthorityFile;
             }
-            $curlAdapter->setCurlOpts($curlOpts);
+
+            $curlAdapter = new OAuthRefreshingCurlAdapter(
+                $restApi,
+                $collection,
+                $curlOpts
+            );
+
             $oaiPmhClient = new Client($oaiPmhApi['url'], $curlAdapter);
-            $oaiPmhEndpoint = new Endpoint($oaiPmhClient);
-        } catch(OaipmhException $e) {
-            if($e->getOaiErrorCode() == 'noRecordsMatch') {
+
+            return new Endpoint($oaiPmhClient);
+        } catch (OaipmhException $e) {
+            if ($e->getOaiErrorCode() === 'noRecordsMatch') {
                 echo 'No records to process, exiting.' . PHP_EOL;
             } else {
                 echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
-        }
-        catch(HttpException $e) {
+        } catch (HttpException $e) {
             echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
-        }
-        catch(Exception $e) {
+        } catch (Exception $e) {
             echo 'OAI-PMH error (3) at collection ' . $collection . ': ' . $e . PHP_EOL;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
         }
-        return $oaiPmhEndpoint;
+
+        return null;
     }
 }

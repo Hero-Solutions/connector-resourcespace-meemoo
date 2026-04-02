@@ -2,6 +2,8 @@
 
 namespace App\Util;
 
+use DateTimeImmutable;
+use DateTimeInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class RestApi
@@ -14,7 +16,8 @@ class RestApi
     private bool $overrideCertificateAuthorityFile;
     private string $sslCertificateAuthorityFile;
 
-    private array $tokens = array();
+    private array $tokens = [];
+    private array $tokenExpiresAt = [];
 
     public function __construct(ParameterBagInterface $params)
     {
@@ -28,16 +31,53 @@ class RestApi
         $this->sslCertificateAuthorityFile = $params->get('ssl_certificate_authority_file');
     }
 
-    public function getAccessToken($collection): ?string
+    public function getRawAccessToken(string $collection): ?string
     {
-        if(!array_key_exists($collection, $this->tokens)) {
-            $this->initializeToken($collection);
-        }
-        if(!array_key_exists($collection, $this->tokens)) {
+        $this->ensureValidAccessToken($collection);
+
+        if (!array_key_exists($collection, $this->tokens)) {
             echo 'No valid OAuth token generated!' . PHP_EOL;
             return null;
         }
-        return urlencode($this->tokens[$collection]);
+
+        return $this->tokens[$collection];
+    }
+
+    public function getAccessToken(string $collection): ?string
+    {
+        $token = $this->getRawAccessToken($collection);
+
+        return $token !== null ? urlencode($token) : null;
+    }
+
+    public function ensureValidAccessToken(string $collection, int $refreshBeforeSeconds = 600): bool
+    {
+        if (!array_key_exists($collection, $this->tokens) || !array_key_exists($collection, $this->tokenExpiresAt)) {
+            $this->initializeToken($collection);
+            return array_key_exists($collection, $this->tokens);
+        }
+
+        $expiresAt = $this->tokenExpiresAt[$collection];
+        if (!$expiresAt instanceof DateTimeInterface) {
+            $this->initializeToken($collection);
+            return array_key_exists($collection, $this->tokens);
+        }
+
+        if ($expiresAt->getTimestamp() <= time() + $refreshBeforeSeconds) {
+            $this->initializeToken($collection);
+            return array_key_exists($collection, $this->tokens);
+        }
+
+        return true;
+    }
+
+    public function forceRefreshAccessToken(string $collection): bool
+    {
+        unset($this->tokens[$collection], $this->tokenExpiresAt[$collection]);
+
+        $this->initializeToken($collection);
+
+        return array_key_exists($collection, $this->tokens);
     }
 
     public function updateMetadata($collection, $fragmentId, $jsonQuery): bool
@@ -81,10 +121,7 @@ class RestApi
     public function requestExportJob($collection, $id): array
     {
         $resultJson = 'ERROR';
-        if(!array_key_exists($collection, $this->tokens)) {
-            $resultJson = $this->initializeToken($collection);
-        }
-        if(!array_key_exists($collection, $this->tokens)) {
+        if (!$this->ensureValidAccessToken($collection)) {
             return array(
                 "success" => false,
                 "message" => 'No valid OAuth token - could not download original. Please report the following error to the museum\'s system administrator: ' . $resultJson
@@ -98,7 +135,7 @@ class RestApi
             curl_setopt($ch,CURLOPT_CAINFO, $this->sslCertificateAuthorityFile);
             curl_setopt($ch,CURLOPT_CAPATH, $this->sslCertificateAuthorityFile);
         }
-        curl_setopt($ch,CURLOPT_URL, $this->exportUrl . '?access_token=' . urlencode($this->tokens[$collection]));
+        curl_setopt($ch,CURLOPT_URL, $this->exportUrl . '?access_token=' . urlencode($this->getAccessToken($collection)));
         curl_setopt($ch,CURLOPT_POST, true);
         curl_setopt($ch,CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
@@ -130,10 +167,7 @@ class RestApi
     public function checkExportJobStatus($collection, $jobId): array
     {
         $resultJson = 'ERROR';
-        if(!array_key_exists($collection, $this->tokens)) {
-            $resultJson = $this->initializeToken($collection);
-        }
-        if(!array_key_exists($collection, $this->tokens)) {
+        if (!$this->ensureValidAccessToken($collection)) {
             return array(
                 "success" => false,
                 "message" => 'No valid OAuth token - could not download original. Please report the following error to the museum\'s system administrator: ' . $resultJson
@@ -145,7 +179,7 @@ class RestApi
             curl_setopt($ch,CURLOPT_CAINFO, $this->sslCertificateAuthorityFile);
             curl_setopt($ch,CURLOPT_CAPATH, $this->sslCertificateAuthorityFile);
         }
-        curl_setopt($ch,CURLOPT_URL, $this->exportUrl . urlencode($jobId) . '?access_token=' . urlencode($this->tokens[$collection]));
+        curl_setopt($ch,CURLOPT_URL, $this->exportUrl . urlencode($jobId) . '?access_token=' . urlencode($this->getAccessToken($collection)));
         curl_setopt($ch,CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
 
@@ -172,20 +206,22 @@ class RestApi
         );
     }
 
-    private function initializeToken($collection): string|bool
+    private function initializeToken(string $collection): string|bool
     {
         $ch = curl_init();
         if ($ch === false) {
             return 'Failed to initialize cURL';
         }
+
         if ($this->overrideCertificateAuthorityFile) {
             curl_setopt($ch,CURLOPT_CAINFO, $this->sslCertificateAuthorityFile);
             curl_setopt($ch,CURLOPT_CAPATH, $this->sslCertificateAuthorityFile);
         }
-        curl_setopt($ch,CURLOPT_URL, $this->authUrl);
-        curl_setopt($ch,CURLOPT_POST, true);
-        curl_setopt($ch,CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch,CURLOPT_POSTFIELDS,
+
+        curl_setopt($ch, CURLOPT_URL, $this->authUrl);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS,
             'username=' . urlencode($this->credentials[$collection]['username'])
             . '&password=' . urlencode($this->credentials[$collection]['password'])
             . '&client_id=' . urlencode($this->credentials[$collection]['client_id'])
@@ -193,28 +229,36 @@ class RestApi
         );
 
         $resultJson = curl_exec($ch);
-        if($resultJson === false) {
-            echo 'Error initializing token: ' . curl_error($ch) . ': ' . curl_errno($ch) . PHP_EOL;
-            return 'Error: ' . curl_error($ch) . ': ' . curl_errno($ch);
+        if ($resultJson === false) {
+            $error = 'Error initializing token: ' . curl_error($ch) . ': ' . curl_errno($ch);
+            echo $error . PHP_EOL;
+            curl_close($ch);
+            return $error;
         }
 
         if (!curl_errno($ch)) {
             $result = json_decode($resultJson);
-            if(property_exists($result, 'access_token')) {
+
+            if (is_object($result) && property_exists($result, 'access_token')) {
                 $this->tokens[$collection] = $result->access_token;
+
+                $expiresIn = property_exists($result, 'expires_in') ? (int) $result->expires_in : 3600;
+                $this->tokenExpiresAt[$collection] = new DateTimeImmutable('+' . max(1, $expiresIn) . ' seconds');
+
+                curl_close($ch);
+                return $resultJson;
+            }
+
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            if ($httpCode === 200) {
+                $resultJson = 'Error: ' . $resultJson;
             } else {
-                switch ($http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE)) {
-                    case 200:
-                        $resultJson = 'Error: ' . $resultJson . PHP_EOL;
-                        break;
-                    default:
-                        $resultJson = 'HTTP error ' . $http_code . ': ' . $resultJson . PHP_EOL;
-                        break;
-                }
+                $resultJson = 'HTTP error ' . $httpCode . ': ' . $resultJson;
             }
         }
 
         curl_close($ch);
+
         return $resultJson;
     }
 }
