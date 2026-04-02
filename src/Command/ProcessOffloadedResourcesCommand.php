@@ -121,35 +121,57 @@ class ProcessOffloadedResourcesCommand extends Command
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
         $oaiPmhApi = $this->params->get('oai_pmh_api');
 
-        foreach($collections as $collection) {
+        foreach ($collections as $collection) {
             try {
-                $oaiPmhEndpoint = OaiPmhApiUtil::connect($this->restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
-                $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
+                $oaiPmhEndpoint = OaiPmhApiUtil::connect(
+                    $this->restApi,
+                    $oaiPmhApi,
+                    $collection,
+                    $overrideCertificateAuthorityFile,
+                    $sslCertificateAuthorityFile
+                );
 
-                foreach($records as $record) {
-                    $this->processRecord($collection, $record->header->identifier, $record->metadata->children($oaiPmhApi['namespace'], true),
-                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath'], $oaiPmhApi['archive_status_xpath'],
-                        $oaiPmhApi['completed_status']);
+                $records = $oaiPmhEndpoint->listRecords(
+                    $oaiPmhApi['metadata_prefix'],
+                    new DateTime($lastOffloadDateTime)
+                );
+
+                foreach ($records as $record) {
+                    try {
+                        $this->processRecord(
+                            $collection,
+                            $record->header->identifier,
+                            $record->metadata->children($oaiPmhApi['namespace'], true),
+                            $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'],
+                            $oaiPmhApi['media_id_xpath'],
+                            $oaiPmhApi['archive_status_xpath'],
+                            $oaiPmhApi['completed_status']
+                        );
+                    } catch (Exception $e) {
+                        echo 'Error processing record '
+                            . ($record->header->identifier ?? 'unknown')
+                            . ' in collection ' . $collection . ': '
+                            . $e . PHP_EOL;
+
+                        $this->processError = true;
+                    }
                 }
             }
-            catch(OaipmhException $e) {
-                if($e->getOaiErrorCode() == 'noRecordsMatch') {
+            catch (OaipmhException $e) {
+                if ($e->getOaiErrorCode() == 'noRecordsMatch') {
                     echo 'No records to process for ' . $collection . '.' . PHP_EOL;
                 } else {
                     echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
                     $this->processError = true;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
                 }
             }
-            catch(HttpException $e) {
+            catch (HttpException $e) {
                 echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
                 $this->processError = true;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
-            catch(Exception $e) {
+            catch (Exception $e) {
                 echo 'OAI-PMH error (3) at collection ' . $collection . ': ' . $e . PHP_EOL;
                 $this->processError = true;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
     }
