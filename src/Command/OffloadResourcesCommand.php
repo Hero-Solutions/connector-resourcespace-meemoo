@@ -462,7 +462,7 @@ class OffloadResourcesCommand extends Command
             }
         }
 
-        if(file_exists($localFilename)) {
+        if($localFilename !== null && file_exists($localFilename)) {
             unlink($localFilename);
         }
     }
