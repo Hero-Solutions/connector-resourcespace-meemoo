@@ -62,7 +62,7 @@ class OffloadResourcesCommand extends Command
 
     private int $lastOffloadTimestamp;
     private int $lastMetadataTemplateChange;
-    private ?TemplateWrapper $metadataTemplate;
+    private ?TemplateWrapper $metadataTemplate = null;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $forceUpdate = false, $dryRun = false)
     {
