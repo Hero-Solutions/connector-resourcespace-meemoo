@@ -250,7 +250,7 @@ class ProcessOffloadedResourcesCommand extends Command
                             echo ($this->dryRun ? ' DRY RUN - ' : '')
                                 . 'Resource ' . $resourceId . ' has been processed by meemoo'
                                 . ($updatedStatus ? ' - updated status' : ' - no-op status')
-                                . ($updatedMetadata ? ' - updated metadata' : ' - no-op metadata')
+                                . ($updatedMetadata ? ' - updated metadata ' . $imageUrl . ' ' . $assetUrl : ' - no-op metadata')
                                 . PHP_EOL;
         /*                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
                             echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
