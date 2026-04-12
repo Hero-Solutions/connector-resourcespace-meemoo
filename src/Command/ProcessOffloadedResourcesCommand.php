@@ -190,18 +190,19 @@ class ProcessOffloadedResourcesCommand extends Command
                         $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
                         $statusKey = $this->offloadStatusField['key'];
 
-                        $updatedMetadata = false;
+                        $updatedAssetUrl = false;
+                        $updatedImageUrl = false;
                         $updatedStatus = false;
 
                         if (!empty($resourceMetadata[$statusKey])) {
                             $existingAssetUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_asset_url']];
                             if (empty($existingAssetUrl)) {
-                                $updatedMetadata = true;
+                                $updatedAssetUrl = true;
                                 if(!$this->dryRun) {
                                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $assetUrl);
                                 }
                             } else if (!str_contains($existingAssetUrl, $assetUrl)) {
-                                $updatedMetadata = true;
+                                $updatedAssetUrl = true;
                                 if(!$this->dryRun) {
                                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_asset_url'], $existingAssetUrl . PHP_EOL . PHP_EOL . $assetUrl);
                                 }
@@ -209,12 +210,12 @@ class ProcessOffloadedResourcesCommand extends Command
 
                             $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']];
                             if (empty($existingOriginalUrl)) {
-                                $updatedMetadata = true;
+                                $updatedImageUrl = true;
                                 if(!$this->dryRun) {
                                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $imageUrl);
                                 }
                             } else if (!str_contains($existingOriginalUrl, $imageUrl)) {
-                                $updatedMetadata = true;
+                                $updatedImageUrl = true;
                                 if(!$this->dryRun) {
                                     $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['meemoo_image_url'], $existingOriginalUrl . PHP_EOL . PHP_EOL . $imageUrl);
                                 }
@@ -250,7 +251,8 @@ class ProcessOffloadedResourcesCommand extends Command
                             echo ($this->dryRun ? ' DRY RUN - ' : '')
                                 . 'Resource ' . $resourceId . ' has been processed by meemoo'
                                 . ($updatedStatus ? ' - updated status' : ' - no-op status')
-                                . ($updatedMetadata ? ' - updated metadata ' . $imageUrl . ' ' . $assetUrl : ' - no-op metadata')
+                                . ($updatedAssetUrl ? ' - updated asset URL ' . $assetUrl : ' - no-op asset URL')
+                                . ($updatedImageUrl ? ' - updated image URL ' . $imageUrl : ' - no-op image URL')
                                 . PHP_EOL;
         /*                    echo 'Resource ' . $resourceId . ' has asset URL: ' . $assetUrl . PHP_EOL;
                             echo 'Resource ' . $resourceId . ' has image URL: ' . $imageUrl . PHP_EOL;
