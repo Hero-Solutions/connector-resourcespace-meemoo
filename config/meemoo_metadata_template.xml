@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <VIAA>
-
-<!-- LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML -->
-
+{# LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML #}
   <CP>{{ attribute(conversion_table.cp, resource.publisher) }}</CP>
   <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
-<!--  <dc_source>{{ filename }}</dc_source> -->
   <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
 {% if resource.inventorynumber is not empty %}
   <dc_identifier_localids type="list">
@@ -22,58 +19,62 @@
 {% if creation_date is not empty %}
   <dcterms_created>{{ creation_date }}</dcterms_created>
 {% endif %}
-{% if resource.artworkcreator is not empty %}
-  <dc_creators type="list">
-{% for artworkcreator in resource.artworkcreator|split(',') %}
-    <Maker>{{ artworkcreator }}</Maker>
-{% endfor %}
-  </dc_creators>
-{% endif %}
-{% if resource.creator is not empty or resource.contributor is not empty %}
-  <dc_contributors type="list">
-{% if resource.creator is not empty %}
-{% for creator in resource.creator|split(',') %}
-    <Digitaliseringspartner>{{ creator }}</Digitaliseringspartner>
-{% endfor %}
+{% if resource.artworkcreator is not empty or resource.creator is not empty %}
+<dc_creators type="list">
+    {% if resource.artworkcreator is not empty %}
+    {% for artworkcreator in resource.artworkcreator|split(',') %}
+    {% set maker = artworkcreator|trim|replace({' (Vervaardiger)': ''}) %}
+    {% if maker is not empty %}
+    <Maker>{{ maker|e('xml') }}</Maker>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% if resource.creator is not empty %}
+    {% for creator in resource.creator|split(',') %}
+    {% set photographer = creator|trim %}
+    {% if photographer is not empty %}
+    <Fotograaf>{{ photographer|e('xml') }}</Fotograaf>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+</dc_creators>
 {% endif %}
 {% if resource.contributor is not empty %}
-{% for contributor in resource.contributor|split(',') %}
-    <Bijdrager>{{ contributor }}</Bijdrager>
-{% endfor %}
-{% endif %}
-  </dc_contributors>
+<dc_contributors type="list">
+    {% for contributor in resource.contributor|split(',') %}
+    {% set contributor = contributor|trim %}
+    {% if contributor is not empty %}
+    <Bijdrager>{{ contributor|e('xml') }}</Bijdrager>
+    {% endif %}
+    {% endfor %}
+</dc_contributors>
 {% endif %}
 {% if resource.keywords is not empty or resource.personinimage is not empty or resource.category is not empty %}
-<!-- Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
+{# Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma #}
   <dc_subjects type="list">
 {% if resource.keywords is not empty %}
 {% for keyword in resource.keywords|split(',') %}
-    <Trefwoord>{{ keyword }}​​</Trefwoord>
+{% if keyword is not empty %}
+    <Trefwoord>{{ keyword|e('xml') }}</Trefwoord>
+{% endif %}
 {% endfor %}
 {% endif %}
 {% if resource.personinimage is not empty %}
 {% for personinimage in resource.personinimage|split(',') %}
-    <Trefwoord>{{ personinimage }}​​</Trefwoord>
+    <Trefwoord>{{ personinimage }}</Trefwoord>
 {% endfor %}
 {% endif %}
 {% if resource.category is not empty %}
 {% for categorytemp in resource.category|split(',') %}
 {% for category in categorytemp|split('/')[1:] %}
-    <Trefwoord>{{ category }}​​</Trefwoord>
+    <Trefwoord>{{ category }}</Trefwoord>
 {% endfor %}
 {% endfor %}
 {% endif %}
   </dc_subjects>
 {% endif %}
-<!-- Description met fallback voor TMS-description -->
-{% if resource.publisher == 'MOMU' and resource.tmsdescription is not empty %}
-  <dc_description>{{ resource.tmsdescription }}</dc_description>
-{% elseif resource.description is not empty %}
-  <dc_description>{{ resource.description }}</dc_description>
-{% else %}
-  <dc_description></dc_description>
-{% endif %}
-<!-- Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description -->
+  <dc_description>{{ main_description }}</dc_description>
+{# Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description #}
 {% set description = [] %}
 {% if resource.externalnote is not empty %}
 {% set description = description | merge(['External Note: ' ~ resource.externalnote]) %}
@@ -84,7 +85,7 @@
 {% if description is not empty %}
   <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
 {% endif %}
-<!--
+{#
 {% if resource.rightsstatements is not empty or resource.license is not empty %}
   <dc_rights_licenses type="list">
 {% if resource.rightsstatements is not empty %}
@@ -98,7 +99,7 @@
 {% endif %}
   </dc_rights_licenses>
 {% endif %}
--->
+#}
 {% if resource.license is not empty %}
   <dc_rights_licenses type="list">
 {% for license in attribute(conversion_table.license, resource.license) %}
@@ -107,7 +108,7 @@
   </dc_rights_licenses>
 {% endif %}
 {% if resource.copyrightowner is not empty or resource.artworkcopyrightowner is not empty or resource.licensor is not empty %}
-<!-- Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma -->
+{# Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma #}
   <dc_rights_rightsOwners type="list">
 {% if resource.copyrightowner is not empty %}
 {% for copyrightowner in resource.copyrightowner|split(',') %}

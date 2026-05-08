@@ -354,7 +354,10 @@ class OffloadResourcesCommand extends Command
         // For debugging purposes
 //        var_dump($resourceMetadata);
 
-        $uniqueFilenameWithoutExtension = $resourceId . '_' . pathinfo($resourceMetadata['originalfilename'], PATHINFO_FILENAME);
+        $originalStem = pathinfo($resourceMetadata['originalfilename'], PATHINFO_FILENAME);
+        $safeStem = $this->sanitizeMeemooFilenamePart($originalStem);
+
+        $uniqueFilenameWithoutExtension = $resourceId . '_' . $safeStem;
         $uniqueFilename = $uniqueFilenameWithoutExtension . '.' . $extension;
 
         $calculateMd5 = false;
@@ -484,12 +487,22 @@ class OffloadResourcesCommand extends Command
             die('Could not initialize Twig template - exiting.');
         }
 
+        $mainDescription = $this->getMainDescription($data);
+        if(empty($mainDescription)) {
+            echo 'ERROR: resource ' . $resourceId . ' is missing a description' . PHP_EOL;
+            if (!$this->dryRun) {
+                $this->resourceSpace->updateError($resourceId, $this->errorField, 'Error: description is missing', $data, false, true);
+            }
+            return null;
+        }
+
         $xmlData = null;
         try {
             $xmlData = $this->metadataTemplate->render(array(
                 'resource' => $data,
                 'resource_id' => $resourceId,
                 'filename' => $uniqueFilename,
+                'main_description' => $mainDescription,
                 'collection' => $collection,
                 'md5_hash' => $md5,
                 'creation_date' => str_replace(' ', 'T', $creationDate),
@@ -509,8 +522,6 @@ class OffloadResourcesCommand extends Command
         }
         $validated = false;
 
-        // Remove zero width spaces (no idea how they got there)
-        $xmlData = str_replace( '\u200b', '', $xmlData);
         file_put_contents($xmlFile, $xmlData);
 
         $domDoc = null;
@@ -527,6 +538,34 @@ class OffloadResourcesCommand extends Command
             }
         }
         return $validated ? $domDoc : null;
+    }
+
+    private function sanitizeMeemooFilenamePart(string $value): string
+    {
+        $value = trim($value);
+
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+        if ($ascii !== false) {
+            $value = $ascii;
+        }
+
+        $value = preg_replace('/[^A-Za-z0-9_-]+/', '_', $value);
+        $value = trim($value, '_-');
+
+        return $value !== '' ? $value : 'bestand';
+    }
+
+    private function getMainDescription(array $metadata): string
+    {
+        $publisher = trim((string)($metadata['publisher'] ?? ''));
+        $tmsDescription = trim((string)($metadata['tmsdescription'] ?? ''));
+        $description = trim((string)($metadata['description'] ?? ''));
+
+        if ($publisher === 'MOMU' && $tmsDescription !== '') {
+            return $tmsDescription;
+        }
+
+        return $description;
     }
 
     private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection): bool
