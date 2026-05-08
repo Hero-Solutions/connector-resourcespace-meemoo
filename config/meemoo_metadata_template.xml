@@ -1,138 +1,157 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <VIAA>
-{# LICENTIE MOET NOG GEBEUREN VIA CONVERSION TABLE IN CONNECTOR.YML #}
-  <CP>{{ attribute(conversion_table.cp, resource.publisher) }}</CP>
-  <CP_id>{{ attribute(conversion_table.cp_id, resource.publisher) }}</CP_id>
-  <dc_identifier_localid>{{ resource_id }}</dc_identifier_localid>
-{% if resource.inventorynumber is not empty %}
+{% set publisher = resource.publisher|default('')|trim %}
+  <CP>{{ attribute(conversion_table.cp, publisher)|e }}</CP>
+  <CP_id>{{ attribute(conversion_table.cp_id, publisher)|e }}</CP_id>
+  <dc_identifier_localid>{{ resource_id|e }}</dc_identifier_localid>
+{% set inventorynumber = resource.inventorynumber|default('')|trim %}
+{% if inventorynumber is not empty %}
   <dc_identifier_localids type="list">
-    <Object_number>{{ resource.inventorynumber }}</Object_number>
+    <Object_number>{{ inventorynumber|e }}</Object_number>
   </dc_identifier_localids>
 {% endif %}
-  <md5>{{ md5_hash }}</md5>
-  <dc_title>{{ resource.title }}</dc_title>
-{% if resource.event is not empty %}
+  <md5>{{ md5_hash|e }}</md5>
+  <dc_title>{{ resource.title|default('')|trim|e }}</dc_title>
+{% set event = resource.event|default('')|trim %}
+{% if event is not empty %}
   <dc_titles type="list">
-    <alternatief>{{ resource.event }}</alternatief>
+    <alternatief>{{ event|e }}</alternatief>
   </dc_titles>
 {% endif %}
 {% if creation_date is not empty %}
-  <dcterms_created>{{ creation_date }}</dcterms_created>
+  <dcterms_created>{{ creation_date|e }}</dcterms_created>
 {% endif %}
-{% if resource.artworkcreator is not empty or resource.creator is not empty %}
-<dc_creators type="list">
-    {% if resource.artworkcreator is not empty %}
-    {% for artworkcreator in resource.artworkcreator|split(',') %}
-    {% set maker = artworkcreator|trim|replace({' (Vervaardiger)': ''}) %}
-    {% if maker is not empty %}
-    <Maker>{{ maker|e('xml') }}</Maker>
-    {% endif %}
-    {% endfor %}
-    {% endif %}
-    {% if resource.creator is not empty %}
-    {% for creator in resource.creator|split(',') %}
-    {% set photographer = creator|trim %}
-    {% if photographer is not empty %}
-    <Fotograaf>{{ photographer|e('xml') }}</Fotograaf>
-    {% endif %}
-    {% endfor %}
-    {% endif %}
-</dc_creators>
+{% set artworkcreator = resource.artworkcreator|default('') %}
+{% set creator = resource.creator|default('') %}
+{% if artworkcreator|trim is not empty or creator|trim is not empty %}
+  <dc_creators type="list">
+{% if artworkcreator|trim is not empty %}
+{% for artworkcreator_value in artworkcreator|split(',') %}
+{% set maker = artworkcreator_value|replace({' (Vervaardiger)': '', '(Vervaardiger)': ''})|trim %}
+{% if maker is not empty %}
+    <Maker>{{ maker|e }}</Maker>
 {% endif %}
-{% if resource.contributor is not empty %}
-<dc_contributors type="list">
-    {% for contributor in resource.contributor|split(',') %}
-    {% set contributor = contributor|trim %}
-    {% if contributor is not empty %}
-    <Bijdrager>{{ contributor|e('xml') }}</Bijdrager>
-    {% endif %}
-    {% endfor %}
-</dc_contributors>
+{% endfor %}
 {% endif %}
-{% if resource.keywords is not empty or resource.personinimage is not empty or resource.category is not empty %}
-{# Trefwoorden rekening houdende met mogelijke multiple occurrences gescheiden door komma #}
+{% if creator|trim is not empty %}
+{% for creator_value in creator|split(',') %}
+{% set photographer = creator_value|trim %}
+{% if photographer is not empty %}
+    <Fotograaf>{{ photographer|e }}</Fotograaf>
+{% endif %}
+{% endfor %}
+{% endif %}
+  </dc_creators>
+{% endif %}
+{% set contributor = resource.contributor|default('') %}
+{% if contributor|trim is not empty %}
+  <dc_contributors type="list">
+{% for contributor_value in contributor|split(',') %}
+{% set contributor_name = contributor_value|trim %}
+{% if contributor_name is not empty %}
+    <Bijdrager>{{ contributor_name|e }}</Bijdrager>
+{% endif %}
+{% endfor %}
+  </dc_contributors>
+{% endif %}
+{% set keywords = resource.keywords|default('') %}
+{% set personinimage = resource.personinimage|default('') %}
+{% set category_values = resource.category|default('') %}
+{% if keywords|trim is not empty or personinimage|trim is not empty or category_values|trim is not empty %}
   <dc_subjects type="list">
-{% if resource.keywords is not empty %}
-{% for keyword in resource.keywords|split(',') %}
+{% if keywords|trim is not empty %}
+{% for keyword_value in keywords|split(',') %}
+{% set keyword = keyword_value|trim %}
 {% if keyword is not empty %}
-    <Trefwoord>{{ keyword|e('xml') }}</Trefwoord>
+    <Trefwoord>{{ keyword|e }}</Trefwoord>
 {% endif %}
 {% endfor %}
 {% endif %}
-{% if resource.personinimage is not empty %}
-{% for personinimage in resource.personinimage|split(',') %}
-    <Trefwoord>{{ personinimage }}</Trefwoord>
+{% if personinimage|trim is not empty %}
+{% for person_value in personinimage|split(',') %}
+{% set person = person_value|trim %}
+{% if person is not empty %}
+    <Trefwoord>{{ person|e }}</Trefwoord>
+{% endif %}
 {% endfor %}
 {% endif %}
-{% if resource.category is not empty %}
-{% for categorytemp in resource.category|split(',') %}
-{% for category in categorytemp|split('/')[1:] %}
-    <Trefwoord>{{ category }}</Trefwoord>
+{% if category_values|trim is not empty %}
+{% for categorytemp in category_values|split(',') %}
+{% for category in categorytemp|split('/')|slice(1) %}
+{% set category_name = category|trim %}
+{% if category_name is not empty %}
+    <Trefwoord>{{ category_name|e }}</Trefwoord>
+{% endif %}
 {% endfor %}
 {% endfor %}
 {% endif %}
   </dc_subjects>
 {% endif %}
-  <dc_description>{{ main_description }}</dc_description>
-{# Samengevoegde velden in long description door middel van het samenvoegen van allerlei in een variabele genaamd description #}
+  <dc_description>{{ main_description|default('')|trim|e }}</dc_description>
 {% set description = [] %}
-{% if resource.externalnote is not empty %}
-{% set description = description | merge(['External Note: ' ~ resource.externalnote]) %}
+{% set externalnote = resource.externalnote|default('')|trim %}
+{% if externalnote is not empty %}
+{% set description = description|merge(['External Note: ' ~ externalnote]) %}
 {% endif %}
-{% if resource.sourcematerialtype is not empty %}
-{% set description = description | merge(['Material type: ' ~ resource.sourcematerialtype]) %}
+{% set sourcematerialtype = resource.sourcematerialtype|default('')|trim %}
+{% if sourcematerialtype is not empty %}
+{% set description = description|merge(['Material type: ' ~ sourcematerialtype]) %}
 {% endif %}
 {% if description is not empty %}
-  <dc_description_lang>{{ description | join(' | ') }}</dc_description_lang>
+  <dc_description_lang>{{ description|join(' | ')|e }}</dc_description_lang>
 {% endif %}
-{#
-{% if resource.rightsstatements is not empty or resource.license is not empty %}
+{% set license_value = resource.license|default('')|trim %}
+{% if license_value is not empty %}
   <dc_rights_licenses type="list">
-{% if resource.rightsstatements is not empty %}
-{% for license in attribute(conversion_table.rightsstatements, resource.rightsstatements) %}
-    <multiselect>{{ license }}</multiselect>
-{% endfor %}
-{% elseif resource.license is not empty %}
-{% for license in attribute(conversion_table.license, resource.license) %}
-    <multiselect>{{ license }}</multiselect>
-{% endfor %}
+{% for license in attribute(conversion_table.license, license_value) %}
+{% set mapped_license = license|trim %}
+{% if mapped_license is not empty %}
+    <multiselect>{{ mapped_license|e }}</multiselect>
 {% endif %}
-  </dc_rights_licenses>
-{% endif %}
-#}
-{% if resource.license is not empty %}
-  <dc_rights_licenses type="list">
-{% for license in attribute(conversion_table.license, resource.license) %}
-    <multiselect>{{ license }}</multiselect>
 {% endfor %}
   </dc_rights_licenses>
 {% endif %}
-{% if resource.copyrightowner is not empty or resource.artworkcopyrightowner is not empty or resource.licensor is not empty %}
-{# Rightsowners rekening houdende met mogelijke multiple occurrences gescheiden door komma #}
+{% set copyrightowner = resource.copyrightowner|default('') %}
+{% set artworkcopyrightowner = resource.artworkcopyrightowner|default('') %}
+{% set licensor = resource.licensor|default('') %}
+{% if copyrightowner|trim is not empty or artworkcopyrightowner|trim is not empty or licensor|trim is not empty %}
   <dc_rights_rightsOwners type="list">
-{% if resource.copyrightowner is not empty %}
-{% for copyrightowner in resource.copyrightowner|split(',') %}
-    <Auteursrechthouder>{{ copyrightowner }}</Auteursrechthouder>
+{% if copyrightowner|trim is not empty %}
+{% for copyrightowner_value in copyrightowner|split(',') %}
+{% set rights_owner = copyrightowner_value|trim %}
+{% if rights_owner is not empty %}
+    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% endif %}
 {% endfor %}
 {% endif %}
-{% if resource.artworkcopyrightowner is not empty %}
-{% for artworkcopyrightowner in resource.artworkcopyrightowner|split(',') %}
-    <Auteursrechthouder>{{ artworkcopyrightowner }}</Auteursrechthouder>
+{% if artworkcopyrightowner|trim is not empty %}
+{% for artworkcopyrightowner_value in artworkcopyrightowner|split(',') %}
+{% set rights_owner = artworkcopyrightowner_value|trim %}
+{% if rights_owner is not empty %}
+    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% endif %}
 {% endfor %}
 {% endif %}
-{% if resource.licensor is not empty %}
-{% for licensor in resource.licensor|split(',') %}
-    <Auteursrechthouder>{{ licensor }}</Auteursrechthouder>
+{% if licensor|trim is not empty %}
+{% for licensor_value in licensor|split(',') %}
+{% set rights_owner = licensor_value|trim %}
+{% if rights_owner is not empty %}
+    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% endif %}
 {% endfor %}
 {% endif %}
   </dc_rights_rightsOwners>
 {% endif %}
-{% if resource.copyrightnotice is not empty and resource.credit is not empty %}
-  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
-  <dc_rights_comment>{{ resource.copyrightnotice }}</dc_rights_comment>
-{% elseif resource.copyrightnotice is not empty %}
-  <dc_rights_credit>{{ resource.copyrightnotice }}</dc_rights_credit>
-{% elseif resource.credit is not empty %}
-  <dc_rights_credit>{{ resource.credit }}</dc_rights_credit>
+{% set credit = resource.credit|default('')|trim %}
+{% set copyrightnotice = resource.copyrightnotice|default('')|trim %}
+{% if credit is not empty or copyrightnotice is not empty %}
+{% set rights_credit = [] %}
+{% if credit is not empty %}
+{% set rights_credit = rights_credit|merge([credit]) %}
+{% endif %}
+{% if copyrightnotice is not empty and copyrightnotice != credit %}
+{% set rights_credit = rights_credit|merge([copyrightnotice]) %}
+{% endif %}
+  <dc_rights_credit>{{ rights_credit|join(' | ')|e }}</dc_rights_credit>
 {% endif %}
 </VIAA>

@@ -135,6 +135,11 @@ class OffloadResourcesCommand extends Command
                 $this->relevantResourceSpaceFields[] = $match;
             }
         }
+        foreach (['description', 'tmsdescription'] as $field) {
+            if (!in_array($field, $this->relevantResourceSpaceFields)) {
+                $this->relevantResourceSpaceFields[] = $field;
+            }
+        }
 
         $this->templateXsdSchemaFile = $this->params->get('template_xsd_schema_file');
         if (!file_exists($this->templateXsdSchemaFile)) {
@@ -508,6 +513,7 @@ class OffloadResourcesCommand extends Command
                 'creation_date' => str_replace(' ', 'T', $creationDate),
                 'conversion_table' => $this->conversionTable
             ));
+            $xmlData = $this->stripInvisibleUnicode($xmlData);
             $validated = true;
         } catch(Exception $e) {
             echo 'ERROR: XML file ' . $xmlFile . ' is not valid:' . PHP_EOL . $e->getMessage() . PHP_EOL;
@@ -540,9 +546,34 @@ class OffloadResourcesCommand extends Command
         return $validated ? $domDoc : null;
     }
 
+    private function stripInvisibleUnicode(string $value): string
+    {
+        return preg_replace('/[\x{200B}\x{200C}\x{200D}\x{FEFF}]/u', '', $value) ?? $value;
+    }
+
+    private function cleanMetadataText($value): string
+    {
+        $value = (string) ($value ?? '');
+        $value = $this->stripInvisibleUnicode($value);
+        $value = preg_replace('/\x{00A0}/u', ' ', $value) ?? $value;
+
+        return trim($value);
+    }
+
+    private function normalizeForComparison($value): string
+    {
+        $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if ($json === false) {
+            return '';
+        }
+
+        return $this->stripInvisibleUnicode($json);
+    }
+
     private function sanitizeMeemooFilenamePart(string $value): string
     {
-        $value = trim($value);
+        $value = $this->cleanMetadataText($value);
 
         $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
         if ($ascii !== false) {
@@ -557,9 +588,9 @@ class OffloadResourcesCommand extends Command
 
     private function getMainDescription(array $metadata): string
     {
-        $publisher = trim((string)($metadata['publisher'] ?? ''));
-        $tmsDescription = trim((string)($metadata['tmsdescription'] ?? ''));
-        $description = trim((string)($metadata['description'] ?? ''));
+        $publisher = $this->cleanMetadataText($metadata['publisher'] ?? '');
+        $tmsDescription = $this->cleanMetadataText($metadata['tmsdescription'] ?? '');
+        $description = $this->cleanMetadataText($metadata['description'] ?? '');
 
         if ($publisher === 'MOMU' && $tmsDescription !== '') {
             return $tmsDescription;
@@ -751,7 +782,7 @@ class OffloadResourcesCommand extends Command
                     // Pass an empty string in order to wipe data
                     $difference[$key] = "";
                 }
-            } else if(str_replace( '\u200b', '', json_encode($value)) !== str_replace( '\u200b', '', json_encode($newMetadata[$key]))) {
+            } else if ($this->normalizeForComparison($value) !== $this->normalizeForComparison($newMetadata[$key])) {
                 $difference[$key] = $newMetadata[$key];
             }
         }

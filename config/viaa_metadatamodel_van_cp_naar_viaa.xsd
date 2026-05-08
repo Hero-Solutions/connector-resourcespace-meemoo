@@ -470,5 +470,5 @@
       <xs:attribute name="version" type="xs:decimal" use="optional"/>
     </xs:complexType>
   </xs:element>
-      
+
 </xs:schema>
