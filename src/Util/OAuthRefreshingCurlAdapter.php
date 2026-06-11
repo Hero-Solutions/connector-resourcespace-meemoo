@@ -24,6 +24,7 @@ class OAuthRefreshingCurlAdapter extends CurlAdapter
         try {
             return parent::request($url);
         } catch (HttpException $e) {
+            echo 'HTTP exception on URL ' . $url . PHP_EOL;
             if ($this->isInvalidTokenException($e)) {
                 if (!$this->restApi->forceRefreshAccessToken($this->collection)) {
                     throw $e;
