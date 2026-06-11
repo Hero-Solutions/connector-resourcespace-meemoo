@@ -313,45 +313,55 @@ class ProcessOffloadedResourcesCommand extends Command
     private function processMissingResources($collections, $collectionKey): void
     {
         $offloadStatusFilter = array($this->offloadStatusField['values']['offload_pending'], $this->offloadStatusField['values']['offload_pending_but_keep_original']);
+        $statusKey = $this->offloadStatusField['key'];
+        $checkedResources = array();
 
         // Loop through all collections
         foreach($collections as $collection) {
             $this->verboseLog('Checking missing resources for collection ' . $collection . '.');
-            $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $collectionKey . ':' . $collection . '"'));
-            if(!is_array($allResources)) {
-                echo 'ERROR: Could not retrieve ResourceSpace resources for ' . $collection . '.' . PHP_EOL;
-                $this->processError = true;
-                continue;
-            }
-
-            $this->verboseLog('Fetched ' . count($allResources) . ' ResourceSpace resources for ' . $collection . '.');
             $checkedResourceCount = 0;
 
-            // Loop through all resources in this collection
-            foreach($allResources as $resourceInfo) {
-                $checkedResourceCount++;
-                if($checkedResourceCount === 1 || $checkedResourceCount % 100 === 0) {
-                    $this->verboseLog('Checking ResourceSpace resource ' . $checkedResourceCount . ' for ' . $collection . '.');
+            foreach($offloadStatusFilter as $statusFilter) {
+                $this->verboseLog('Searching ResourceSpace resources for ' . $collection . ' with status "' . $statusFilter . '".');
+                $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $collectionKey . ':' . $collection . '" "' . $statusKey . ':' . $statusFilter . '"'));
+                if(!is_array($allResources)) {
+                    echo 'ERROR: Could not retrieve ResourceSpace resources for ' . $collection . ' with status "' . $statusFilter . '".' . PHP_EOL;
+                    $this->processError = true;
+                    continue;
                 }
 
-                $resourceId = $resourceInfo['ref'];
-                if($this->dryRun) {
-                    if (in_array($resourceId, $this->resourcesProcessed)) {
+                $this->verboseLog('Fetched ' . count($allResources) . ' ResourceSpace candidate resources for ' . $collection . ' with status "' . $statusFilter . '".');
+
+                // Loop through all resources in this collection/status search
+                foreach($allResources as $resourceInfo) {
+                    $resourceId = $resourceInfo['ref'];
+                    if(in_array($resourceId, $checkedResources)) {
                         continue;
                     }
-                }
+                    $checkedResources[] = $resourceId;
 
-                // Get this resource's metadata, but only if it has an appropriate offloadStatus
-                $statusKey = $this->offloadStatusField['key'];
-                $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $statusKey, $offloadStatusFilter);
-                if($resourceMetadata != null) {
-                    echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
-                    if(!$this->dryRun) {
-                        $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Resource has not been processed by meemoo.', false, true);
-                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
-                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
-                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                    $checkedResourceCount++;
+                    if($checkedResourceCount === 1 || $checkedResourceCount % 100 === 0) {
+                        $this->verboseLog('Checking ResourceSpace pending candidate ' . $checkedResourceCount . ' for ' . $collection . '.');
+                    }
+
+                    if($this->dryRun) {
+                        if (in_array($resourceId, $this->resourcesProcessed)) {
+                            continue;
+                        }
+                    }
+
+                    // Get this resource's metadata, but only if it has an appropriate offloadStatus
+                    $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $statusKey, $offloadStatusFilter);
+                    if($resourceMetadata != null) {
+                        echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
+                        if(!$this->dryRun) {
+                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Resource has not been processed by meemoo.', false, true);
+                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                            }
                         }
                     }
                 }
