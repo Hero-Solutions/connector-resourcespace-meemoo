@@ -24,15 +24,19 @@ class OAuthRefreshingCurlAdapter extends CurlAdapter
         try {
             return parent::request($url);
         } catch (HttpException $e) {
-            echo 'HTTP exception on URL ' . $url . PHP_EOL;
             if ($this->isInvalidTokenException($e)) {
                 if (!$this->restApi->forceRefreshAccessToken($this->collection)) {
+                    echo 'HTTP exception on URL ' . $url . PHP_EOL;
                     throw $e;
                 }
 
                 $this->applyAccessTokenToCurlOpts();
 
                 return parent::request($url);
+            }
+
+            if (!$this->isEmptyNotFoundException($e)) {
+                echo 'HTTP exception on URL ' . $url . PHP_EOL;
             }
 
             throw $e;
@@ -74,5 +78,10 @@ class OAuthRefreshingCurlAdapter extends CurlAdapter
 
         return ($json['error'] ?? null) === 'invalid_token'
             || str_contains((string) ($json['error_description'] ?? ''), 'expired');
+    }
+
+    private function isEmptyNotFoundException(HttpException $e): bool
+    {
+        return (int) $e->getCode() === 404 && trim($e->getBody()) === '';
     }
 }

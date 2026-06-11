@@ -142,8 +142,12 @@ class ProcessOffloadedResourcesCommand extends Command
                 }
             }
             catch(HttpException $e) {
-                echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
-                $this->processError = true;
+                if($this->isNoRecordsHttpException($e)) {
+                    echo 'No records to process for ' . $collection . '.' . PHP_EOL;
+                } else {
+                    echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
+                    $this->processError = true;
+                }
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
             catch(Exception $e) {
@@ -152,6 +156,11 @@ class ProcessOffloadedResourcesCommand extends Command
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
+    }
+
+    private function isNoRecordsHttpException(HttpException $e): bool
+    {
+        return (int) $e->getCode() === 404 && trim($e->getBody()) === '';
     }
 
     private function processRecord($collection, $assetId, $record,
