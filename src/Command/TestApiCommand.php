@@ -42,9 +42,10 @@ class TestApiCommand extends Command
                 $counter++;
                 if($counter % 100 === 0) {
                     echo 'At ' . $counter . ' records' . PHP_EOL;
+                    break;
                 }
             }
-            echo 'Has ' . $counter . ' records' . PHP_EOL;
+            echo 'Has at least ' . $counter . ' records' . PHP_EOL;
         }
         return 0;
     }
