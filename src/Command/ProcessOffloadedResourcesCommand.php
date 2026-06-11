@@ -104,7 +104,9 @@ class ProcessOffloadedResourcesCommand extends Command
 
         $this->resourcesProcessed = array();
 
+        $this->verboseLog('Processing OAI-PMH records since ' . $lastOffloadDateTime . '.');
         $this->processOaiPmhApi($collections['values'], $lastOffloadDateTime);
+        $this->verboseLog('Checking ResourceSpace resources that are still pending.');
         $this->processMissingResources($collections['values'], $collectionKey);
 
         if(!$this->dryRun && $this->processError === false) {
@@ -122,19 +124,31 @@ class ProcessOffloadedResourcesCommand extends Command
         $oaiPmhApi = $this->params->get('oai_pmh_api');
 
         foreach($collections as $collection) {
+            $recordCount = 0;
+
             try {
+                $this->verboseLog('Starting OAI-PMH collection ' . $collection . '.');
                 $oaiPmhEndpoint = OaiPmhApiUtil::connect($this->restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
+                $this->verboseLog('Requesting OAI-PMH records for ' . $collection . '.');
                 $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
 
                 foreach($records as $record) {
+                    $recordCount++;
+                    if($recordCount === 1 || $recordCount % 100 === 0) {
+                        $this->verboseLog('Processing OAI-PMH record ' . $recordCount . ' for ' . $collection . '.');
+                    }
+
                     $this->processRecord($collection, $record->header->identifier, $record->metadata->children($oaiPmhApi['namespace'], true),
                         $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath'], $oaiPmhApi['archive_status_xpath'],
                         $oaiPmhApi['completed_status']);
                 }
+
+                $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (' . $recordCount . ' records).');
             }
             catch(OaipmhException $e) {
                 if($e->getOaiErrorCode() == 'noRecordsMatch') {
                     echo 'No records to process for ' . $collection . '.' . PHP_EOL;
+                    $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (0 records).');
                 } else {
                     echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
                     $this->processError = true;
@@ -144,6 +158,7 @@ class ProcessOffloadedResourcesCommand extends Command
             catch(HttpException $e) {
                 if($this->isNoRecordsHttpException($e)) {
                     echo 'No records to process for ' . $collection . '.' . PHP_EOL;
+                    $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (0 records).');
                 } else {
                     echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
                     $this->processError = true;
@@ -156,6 +171,16 @@ class ProcessOffloadedResourcesCommand extends Command
 //                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
         }
+    }
+
+    private function verboseLog($message): void
+    {
+        if(!$this->verbose) {
+            return;
+        }
+
+        echo DateTimeUtil::formatTimestampSimple() . ' - ' . $message . PHP_EOL;
+        flush();
     }
 
     private function isNoRecordsHttpException(HttpException $e): bool
@@ -291,9 +316,24 @@ class ProcessOffloadedResourcesCommand extends Command
 
         // Loop through all collections
         foreach($collections as $collection) {
+            $this->verboseLog('Checking missing resources for collection ' . $collection . '.');
             $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $collectionKey . ':' . $collection . '"'));
+            if(!is_array($allResources)) {
+                echo 'ERROR: Could not retrieve ResourceSpace resources for ' . $collection . '.' . PHP_EOL;
+                $this->processError = true;
+                continue;
+            }
+
+            $this->verboseLog('Fetched ' . count($allResources) . ' ResourceSpace resources for ' . $collection . '.');
+            $checkedResourceCount = 0;
+
             // Loop through all resources in this collection
             foreach($allResources as $resourceInfo) {
+                $checkedResourceCount++;
+                if($checkedResourceCount === 1 || $checkedResourceCount % 100 === 0) {
+                    $this->verboseLog('Checking ResourceSpace resource ' . $checkedResourceCount . ' for ' . $collection . '.');
+                }
+
                 $resourceId = $resourceInfo['ref'];
                 if($this->dryRun) {
                     if (in_array($resourceId, $this->resourcesProcessed)) {
@@ -316,6 +356,8 @@ class ProcessOffloadedResourcesCommand extends Command
                     }
                 }
             }
+
+            $this->verboseLog('Finished missing-resource check for ' . $collection . ' (' . $checkedResourceCount . ' resources).');
         }
     }
 }
