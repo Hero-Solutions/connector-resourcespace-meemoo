@@ -3,26 +3,28 @@
 namespace App\Util;
 
 use Phpoaipmh\Exception\HttpException;
-use Phpoaipmh\HttpAdapter\CurlAdapter;
+use Phpoaipmh\HttpAdapter\HttpAdapterInterface;
 
-class OAuthRefreshingCurlAdapter extends CurlAdapter
+/**
+ * Standalone replacement for the library's CurlAdapter: that class calls curl_close()
+ * (deprecated since PHP 8.5) and lacks a native return type on request().
+ * Adds OAuth bearer-token handling with a one-time refresh/retry on expired tokens.
+ */
+class OAuthRefreshingCurlAdapter implements HttpAdapterInterface
 {
     public function __construct(
         private RestApi $restApi,
         private string $collection,
         private array $baseCurlOpts = []
     ) {
-        parent::__construct();
-        $this->applyAccessTokenToCurlOpts();
     }
 
-    public function request($url)
+    public function request($url): string
     {
         $this->restApi->ensureValidAccessToken($this->collection);
-        $this->applyAccessTokenToCurlOpts();
 
         try {
-            return parent::request($url);
+            return $this->doRequest($url);
         } catch (HttpException $e) {
             if ($this->isInvalidTokenException($e)) {
                 if (!$this->restApi->forceRefreshAccessToken($this->collection)) {
@@ -30,9 +32,7 @@ class OAuthRefreshingCurlAdapter extends CurlAdapter
                     throw $e;
                 }
 
-                $this->applyAccessTokenToCurlOpts();
-
-                return parent::request($url);
+                return $this->doRequest($url);
             }
 
             if (!$this->isEmptyNotFoundException($e)) {
@@ -43,21 +43,41 @@ class OAuthRefreshingCurlAdapter extends CurlAdapter
         }
     }
 
-    private function applyAccessTokenToCurlOpts(): void
+    private function doRequest(string $url): string
     {
-        $token = $this->restApi->getRawAccessToken($this->collection);
+        $curlOpts = array_replace([CURLOPT_RETURNTRANSFER => true], $this->baseCurlOpts);
+        $curlOpts[CURLOPT_URL] = $url;
+        $curlOpts[CURLOPT_HTTPHEADER] = $this->buildHeaders();
 
-        if ($token === null) {
-            return;
+        $ch = curl_init();
+        curl_setopt_array($ch, $curlOpts);
+
+        $response = curl_exec($ch);
+        if ($response === false) {
+            throw new HttpException('', 'HTTP Request Failed: ' . curl_error($ch) . ' (errno ' . curl_errno($ch) . ')');
         }
 
-        $curlOpts = $this->baseCurlOpts;
-        $curlOpts[CURLOPT_HTTPHEADER] = [
-            'Authorization: Bearer ' . $token,
-            'Accept: application/xml, text/xml;q=0.9, */*;q=0.8',
-        ];
+        $httpCode = (string) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        if (!str_starts_with($httpCode, '2')) {
+            throw new HttpException($response, sprintf('HTTP Request Failed (code %s): %s', $httpCode, $response), $httpCode);
+        }
+        if (trim($response) === '') {
+            throw new HttpException($response, 'HTTP Response Empty');
+        }
 
-        $this->setCurlOpts($curlOpts, false);
+        return $response;
+    }
+
+    private function buildHeaders(): array
+    {
+        $headers = ['Accept: application/xml, text/xml;q=0.9, */*;q=0.8'];
+
+        $token = $this->restApi->getRawAccessToken($this->collection);
+        if ($token !== null) {
+            array_unshift($headers, 'Authorization: Bearer ' . $token);
+        }
+
+        return $headers;
     }
 
     private function isInvalidTokenException(HttpException $e): bool
