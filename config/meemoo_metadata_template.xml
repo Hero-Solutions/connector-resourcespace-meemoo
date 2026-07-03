@@ -87,7 +87,9 @@
 {% endif %}
   </dc_subjects>
 {% endif %}
-  <dc_description>{{ main_description|default('')|trim|e }}</dc_description>
+{% if main_description|default('')|trim is not empty %}
+  <dc_description>{{ main_description|trim|e }}</dc_description>
+{% endif %}
 {% set description = [] %}
 {% set externalnote = resource.externalnote|default('')|trim %}
 {% if externalnote is not empty %}

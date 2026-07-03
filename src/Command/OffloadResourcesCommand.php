@@ -492,13 +492,10 @@ class OffloadResourcesCommand extends Command
             die('Could not initialize Twig template - exiting.');
         }
 
+        // dc_description is optional in the XSD (minOccurs=0); an empty description is allowed
         $mainDescription = $this->getMainDescription($data);
-        if(empty($mainDescription)) {
-            echo 'ERROR: resource ' . $resourceId . ' is missing a description' . PHP_EOL;
-            if (!$this->dryRun) {
-                $this->resourceSpace->updateError($resourceId, $this->errorField, 'Error: description is missing', $data, false, true);
-            }
-            return null;
+        if (empty($mainDescription) && $this->verbose) {
+            echo 'INFO: resource ' . $resourceId . ' has no description' . PHP_EOL;
         }
 
         $xmlData = null;
@@ -667,6 +664,7 @@ class OffloadResourcesCommand extends Command
                             echo 'No actual difference in metadata for resource ' . $resourceId . ', skipping.' . PHP_EOL;
                             $result = false;
                         } else {
+                            $this->logDestructiveMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference);
                             $descriptiveDifference = [];
                             // If dc_title or dc_description have changed, then Title and Description also need to be updated as separate fields.
                             if (array_key_exists($this->oaiPmhApi['title'], $difference)) {
@@ -792,5 +790,38 @@ class OffloadResourcesCommand extends Command
             }
         }
         return $difference;
+    }
+
+    // Log the old meemoo value of every field this update will empty or overwrite,
+    // so the offload log doubles as a restore record.
+    private function logDestructiveMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference): void
+    {
+        foreach ($difference as $key => $newValue) {
+            if (!array_key_exists($key, $oldMetadata)) {
+                // New field, nothing gets destroyed
+                continue;
+            }
+            $oldValueJson = json_encode($oldMetadata[$key], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $action = $this->isWipeValue($newValue) ? 'WIPE' : 'UPDATE';
+            echo ($this->dryRun ? 'DRY RUN - ' : '') . $action . ' resource ' . $resourceId
+                . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key
+                . '", old meemoo value: ' . $oldValueJson . PHP_EOL;
+        }
+    }
+
+    private function isWipeValue($value): bool
+    {
+        if ($value === '') {
+            return true;
+        }
+        if (is_array($value)) {
+            foreach ($value as $item) {
+                if ($item !== array() && $item !== '') {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 }
