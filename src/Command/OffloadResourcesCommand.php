@@ -52,6 +52,7 @@ class OffloadResourcesCommand extends Command
     private array $resourceSpaceMetadataFields;
     private string $errorField;
     private array $conversionTable;
+    private array $digitizationPartners;
     private string $collectionKey;
     private array $offloadStatusFilter;
     private bool $deleteOriginals;
@@ -181,6 +182,8 @@ class OffloadResourcesCommand extends Command
         $this->errorField = $this->resourceSpaceMetadataFields['offload_error'];
         $offloadValues = $this->offloadStatusField['values'];
         $this->conversionTable = $this->params->get('conversion_table');
+        // Lowercased for case-insensitive matching in the template (e.g. 'D/arch' vs 'D/Arch')
+        $this->digitizationPartners = array_map('mb_strtolower', $this->params->get('digitization_partners'));
 
         $this->collectionKey = $this->collections['key'];
 
@@ -513,7 +516,8 @@ class OffloadResourcesCommand extends Command
                 'collection' => $collection,
                 'md5_hash' => $md5,
                 'creation_date' => str_replace(' ', 'T', $creationDate),
-                'conversion_table' => $this->conversionTable
+                'conversion_table' => $this->conversionTable,
+                'digitization_partners' => $this->digitizationPartners
             ));
             $xmlData = $this->stripInvisibleUnicode($xmlData);
             $validated = true;

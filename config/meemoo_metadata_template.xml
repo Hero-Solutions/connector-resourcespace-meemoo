@@ -23,7 +23,21 @@
 {% endif %}
 {% set artworkcreator = resource.artworkcreator|default('') %}
 {% set creator = resource.creator|default('') %}
-{% if artworkcreator|trim is not empty or creator|trim is not empty %}
+{# The creator field holds either photographers or digitization firms; the digitization_partners
+   list in connector.yml decides which is which (case-insensitive, agreed with meemoo). #}
+{% set photographers = [] %}
+{% set digitization_partner_names = [] %}
+{% for creator_value in creator|split(',') %}
+{% set creator_name = creator_value|trim %}
+{% if creator_name is not empty %}
+{% if creator_name|lower in digitization_partners %}
+{% set digitization_partner_names = digitization_partner_names|merge([creator_name]) %}
+{% else %}
+{% set photographers = photographers|merge([creator_name]) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% if artworkcreator|trim is not empty or photographers is not empty %}
   <dc_creators type="list">
 {% if artworkcreator|trim is not empty %}
 {% for artworkcreator_value in artworkcreator|split(',') %}
@@ -33,24 +47,24 @@
 {% endif %}
 {% endfor %}
 {% endif %}
-{% if creator|trim is not empty %}
-{% for creator_value in creator|split(',') %}
-{% set photographer = creator_value|trim %}
-{% if photographer is not empty %}
+{% for photographer in photographers %}
     <Fotograaf>{{ photographer|e }}</Fotograaf>
-{% endif %}
 {% endfor %}
-{% endif %}
   </dc_creators>
 {% endif %}
 {% set contributor = resource.contributor|default('') %}
-{% if contributor|trim is not empty %}
+{% if contributor|trim is not empty or digitization_partner_names is not empty %}
   <dc_contributors type="list">
+{% if contributor|trim is not empty %}
 {% for contributor_value in contributor|split(',') %}
 {% set contributor_name = contributor_value|trim %}
 {% if contributor_name is not empty %}
     <Bijdrager>{{ contributor_name|e }}</Bijdrager>
 {% endif %}
+{% endfor %}
+{% endif %}
+{% for digitization_partner in digitization_partner_names %}
+    <Digitaliseringspartner>{{ digitization_partner|e }}</Digitaliseringspartner>
 {% endfor %}
   </dc_contributors>
 {% endif %}
