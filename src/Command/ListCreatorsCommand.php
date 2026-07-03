@@ -10,6 +10,8 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ListCreatorsCommand extends Command
 {
+    private const CHUNK_SIZE = 10000;
+
     public function __construct(private ParameterBagInterface $params)
     {
         parent::__construct();
@@ -19,7 +21,7 @@ class ListCreatorsCommand extends Command
     {
         $this
             ->setName('app:list-creators')
-            ->setDescription('Lists all distinct values of the ResourceSpace "creator" field per collection, with counts. Read-only; use this to build the digitization partner list in connector.yml. Large collections: run with php -d memory_limit=3G.');
+            ->setDescription('Lists all distinct values of the ResourceSpace "creator" field per collection, with counts. Read-only; use this to build the digitization partner list in connector.yml.');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -34,46 +36,64 @@ class ListCreatorsCommand extends Command
 
         $combined = [];
         foreach ($collections['values'] as $collection) {
-            echo 'Fetching all ' . $collection . ' resources (one search call, this may take a minute)...' . PHP_EOL;
-            $allResources = $resourceSpace->getAllResources(urlencode('"' . $collectionKey . ':' . $collection . '"'));
-            if (!is_array($allResources)) {
-                echo 'ERROR: could not fetch resources for ' . $collection . '.' . PHP_EOL;
-                continue;
-            }
-
-            $total = count($allResources);
-            echo '=== ' . $collection . ' (' . $total . ' resources) ===' . PHP_EOL;
-            if ($total === 0) {
-                continue;
-            }
-
-            if ($creatorFieldKey === null) {
-                $creatorFieldKey = $this->findCreatorFieldKey($resourceSpace, $allResources[0]['ref']);
-                if ($creatorFieldKey === null) {
-                    echo 'ERROR: could not determine the field reference of "creator" via resource ' . $allResources[0]['ref'] . '.' . PHP_EOL;
-                    continue;
-                }
-            }
+            $search = urlencode('"' . $collectionKey . ':' . $collection . '"');
 
             $tally = [];
             $emptyCount = 0;
-            foreach ($allResources as $row) {
-                $raw = trim((string) ($row[$creatorFieldKey] ?? ''));
-                if ($raw === '') {
-                    $emptyCount++;
-                    continue;
+            $offset = 0;
+            $total = null;
+            $failed = false;
+
+            do {
+                $chunk = $resourceSpace->getResourcesChunk($search, $offset, self::CHUNK_SIZE);
+                if ($chunk === null) {
+                    echo 'ERROR: could not fetch resources for ' . $collection . ' (offset ' . $offset . ').' . PHP_EOL;
+                    $failed = true;
+                    break;
                 }
-                // Split on comma, exactly like the metadata template does
-                foreach (explode(',', $raw) as $value) {
-                    $value = trim($value);
-                    if ($value === '') {
+                if ($total === null) {
+                    $total = (int) $chunk['total'];
+                    echo '=== ' . $collection . ' (' . $total . ' resources) ===' . PHP_EOL;
+                }
+
+                $rows = $chunk['data'];
+                if (empty($rows)) {
+                    break;
+                }
+
+                if ($creatorFieldKey === null) {
+                    $creatorFieldKey = $this->findCreatorFieldKey($resourceSpace, $rows[0]['ref']);
+                    if ($creatorFieldKey === null) {
+                        echo 'ERROR: could not determine the field reference of "creator" via resource ' . $rows[0]['ref'] . '.' . PHP_EOL;
+                        $failed = true;
+                        break;
+                    }
+                }
+
+                foreach ($rows as $row) {
+                    $raw = trim((string) ($row[$creatorFieldKey] ?? ''));
+                    if ($raw === '') {
+                        $emptyCount++;
                         continue;
                     }
-                    $tally[$value] = ($tally[$value] ?? 0) + 1;
-                    $combined[$value] = ($combined[$value] ?? 0) + 1;
+                    // Split on comma, exactly like the metadata template does
+                    foreach (explode(',', $raw) as $value) {
+                        $value = trim($value);
+                        if ($value === '') {
+                            continue;
+                        }
+                        $tally[$value] = ($tally[$value] ?? 0) + 1;
+                        $combined[$value] = ($combined[$value] ?? 0) + 1;
+                    }
                 }
+
+                $offset += count($rows);
+                echo '  ...' . min($offset, $total) . '/' . $total . PHP_EOL;
+            } while ($offset < $total);
+
+            if ($failed) {
+                continue;
             }
-            unset($allResources);
 
             arsort($tally);
             foreach ($tally as $value => $count) {

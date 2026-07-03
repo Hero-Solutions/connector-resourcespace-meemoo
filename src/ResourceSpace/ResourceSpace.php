@@ -47,6 +47,18 @@ class ResourceSpace
         return json_decode($allResources, true);
     }
 
+    // Paginated do_search (ResourceSpace 10.3+): fetchrows 'offset,limit' returns { total, data },
+    // ordered by resource id so consecutive chunks are consistent.
+    public function getResourcesChunk($search, $offset, $count): ?array
+    {
+        $data = $this->doApiCall('do_search&param1=' . $search . '&param3=resourceid&param5=' . urlencode($offset . ',' . $count) . '&param6=asc');
+        $decoded = json_decode($data, true);
+        if (!is_array($decoded) || !array_key_exists('data', $decoded) || !array_key_exists('total', $decoded)) {
+            return null;
+        }
+        return $decoded;
+    }
+
     public function getResourceMetadataIfFieldContains($ref, $fieldName, $filter): ?array
     {
         $rawResourceMetadata = $this->getRawResourceFieldData($ref);
