@@ -114,7 +114,6 @@ class RestApi
                     break;
             }
         }
-        curl_close($ch);
         return $result;
     }
 
@@ -157,7 +156,6 @@ class RestApi
                     break;
             }
         }
-        curl_close($ch);
         return array(
             "success" => $success,
             "message" => $resultJson
@@ -199,7 +197,6 @@ class RestApi
                     break;
             }
         }
-        curl_close($ch);
         return array(
             "success" => $success,
             "message" => $resultJson
@@ -232,7 +229,6 @@ class RestApi
         if ($resultJson === false) {
             $error = 'Error initializing token: ' . curl_error($ch) . ': ' . curl_errno($ch);
             echo $error . PHP_EOL;
-            curl_close($ch);
             return $error;
         }
 
@@ -245,7 +241,6 @@ class RestApi
                 $expiresIn = property_exists($result, 'expires_in') ? (int) $result->expires_in : 3600;
                 $this->tokenExpiresAt[$collection] = new DateTimeImmutable('+' . max(1, $expiresIn) . ' seconds');
 
-                curl_close($ch);
                 return $resultJson;
             }
 
@@ -256,8 +251,6 @@ class RestApi
                 $resultJson = 'HTTP error ' . $httpCode . ': ' . $resultJson;
             }
         }
-
-        curl_close($ch);
 
         return $resultJson;
     }
