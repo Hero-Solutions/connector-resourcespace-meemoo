@@ -492,10 +492,15 @@ class OffloadResourcesCommand extends Command
             die('Could not initialize Twig template - exiting.');
         }
 
-        // dc_description is optional in the XSD (minOccurs=0); an empty description is allowed
+        // The XSD marks dc_description as optional, but meemoo's ingest requires it to be filled in
+        // (confirmed by meemoo via e-mail, July 2026)
         $mainDescription = $this->getMainDescription($data);
-        if (empty($mainDescription) && $this->verbose) {
-            echo 'INFO: resource ' . $resourceId . ' has no description' . PHP_EOL;
+        if (empty($mainDescription)) {
+            echo 'ERROR: resource ' . $resourceId . ' is missing a description' . PHP_EOL;
+            if (!$this->dryRun) {
+                $this->resourceSpace->updateError($resourceId, $this->errorField, 'Error: description is missing', $data, false, true);
+            }
+            return null;
         }
 
         $xmlData = null;
@@ -802,10 +807,17 @@ class OffloadResourcesCommand extends Command
                 continue;
             }
             $oldValueJson = json_encode($oldMetadata[$key], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            $action = $this->isWipeValue($newValue) ? 'WIPE' : 'UPDATE';
-            echo ($this->dryRun ? 'DRY RUN - ' : '') . $action . ' resource ' . $resourceId
-                . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key
-                . '", old meemoo value: ' . $oldValueJson . PHP_EOL;
+            if ($this->isWipeValue($newValue)) {
+                echo ($this->dryRun ? 'DRY RUN - ' : '') . 'WIPE resource ' . $resourceId
+                    . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key
+                    . '", old meemoo value: ' . $oldValueJson . PHP_EOL;
+            } else {
+                $newValueJson = json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                echo ($this->dryRun ? 'DRY RUN - ' : '') . 'UPDATE resource ' . $resourceId
+                    . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key . '"' . PHP_EOL
+                    . '    old: ' . $oldValueJson . PHP_EOL
+                    . '    new: ' . $newValueJson . PHP_EOL;
+            }
         }
     }
 
