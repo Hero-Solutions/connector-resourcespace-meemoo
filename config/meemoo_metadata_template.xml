@@ -71,37 +71,48 @@
 {% endfor %}
   </dc_contributors>
 {% endif %}
+{% set subjects = [] %}
+{% set subject_keys = [] %}
 {% set keywords = resource.keywords|default('') %}
-{% set personinimage = resource.personinimage|default('') %}
-{% set category_values = resource.category|default('') %}
-{% if keywords|trim is not empty or personinimage|trim is not empty or category_values|trim is not empty %}
-  <dc_subjects type="list">
 {% if keywords|trim is not empty %}
 {% for keyword_value in keywords|split(',') %}
 {% set keyword = keyword_value|trim %}
-{% if keyword is not empty %}
-    <Trefwoord>{{ keyword|e }}</Trefwoord>
+{% set subject_key = keyword|lower %}
+{% if keyword is not empty and subject_key not in subject_keys %}
+{% set subjects = subjects|merge([keyword]) %}
+{% set subject_keys = subject_keys|merge([subject_key]) %}
 {% endif %}
 {% endfor %}
 {% endif %}
+{% set personinimage = resource.personinimage|default('') %}
 {% if personinimage|trim is not empty %}
 {% for person_value in personinimage|split(',') %}
 {% set person = person_value|trim %}
-{% if person is not empty %}
-    <Trefwoord>{{ person|e }}</Trefwoord>
+{% set subject_key = person|lower %}
+{% if person is not empty and subject_key not in subject_keys %}
+{% set subjects = subjects|merge([person]) %}
+{% set subject_keys = subject_keys|merge([subject_key]) %}
 {% endif %}
 {% endfor %}
 {% endif %}
+{% set category_values = resource.category|default('') %}
 {% if category_values|trim is not empty %}
 {% for categorytemp in category_values|split(',') %}
 {% for category in categorytemp|split('/')|slice(1) %}
 {% set category_name = category|trim %}
-{% if category_name is not empty %}
-    <Trefwoord>{{ category_name|e }}</Trefwoord>
+{% set subject_key = category_name|lower %}
+{% if category_name is not empty and subject_key not in subject_keys %}
+{% set subjects = subjects|merge([category_name]) %}
+{% set subject_keys = subject_keys|merge([subject_key]) %}
 {% endif %}
 {% endfor %}
 {% endfor %}
 {% endif %}
+{% if subjects is not empty %}
+  <dc_subjects type="list">
+{% for subject in subjects %}
+    <Trefwoord>{{ subject|e }}</Trefwoord>
+{% endfor %}
   </dc_subjects>
 {% endif %}
 {% if main_description|default('')|trim is not empty %}
@@ -133,42 +144,55 @@
 {% set copyrightowner = resource.copyrightowner|default('') %}
 {% set artworkcopyrightowner = resource.artworkcopyrightowner|default('') %}
 {% set licensor = resource.licensor|default('') %}
-{% if copyrightowner|trim is not empty or artworkcopyrightowner|trim is not empty or licensor|trim is not empty %}
-  <dc_rights_rightsOwners type="list">
+{% set rights_owners = [] %}
+{% set rights_owner_keys = [] %}
 {% if copyrightowner|trim is not empty %}
 {% for copyrightowner_value in copyrightowner|split(',') %}
 {% set rights_owner = copyrightowner_value|trim %}
-{% if rights_owner is not empty %}
-    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% set rights_owner_key = rights_owner|lower %}
+{% if rights_owner is not empty and rights_owner_key not in rights_owner_keys %}
+{% set rights_owners = rights_owners|merge([rights_owner]) %}
+{% set rights_owner_keys = rights_owner_keys|merge([rights_owner_key]) %}
 {% endif %}
 {% endfor %}
 {% endif %}
 {% if artworkcopyrightowner|trim is not empty %}
 {% for artworkcopyrightowner_value in artworkcopyrightowner|split(',') %}
 {% set rights_owner = artworkcopyrightowner_value|trim %}
-{% if rights_owner is not empty %}
-    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% set rights_owner_key = rights_owner|lower %}
+{% if rights_owner is not empty and rights_owner_key not in rights_owner_keys %}
+{% set rights_owners = rights_owners|merge([rights_owner]) %}
+{% set rights_owner_keys = rights_owner_keys|merge([rights_owner_key]) %}
 {% endif %}
 {% endfor %}
 {% endif %}
 {% if licensor|trim is not empty %}
 {% for licensor_value in licensor|split(',') %}
 {% set rights_owner = licensor_value|trim %}
-{% if rights_owner is not empty %}
-    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% set rights_owner_key = rights_owner|lower %}
+{% if rights_owner is not empty and rights_owner_key not in rights_owner_keys %}
+{% set rights_owners = rights_owners|merge([rights_owner]) %}
+{% set rights_owner_keys = rights_owner_keys|merge([rights_owner_key]) %}
 {% endif %}
 {% endfor %}
 {% endif %}
+{% if rights_owners is not empty %}
+  <dc_rights_rightsOwners type="list">
+{% for rights_owner in rights_owners %}
+    <Auteursrechthouder>{{ rights_owner|e }}</Auteursrechthouder>
+{% endfor %}
   </dc_rights_rightsOwners>
 {% endif %}
 {% set credit = resource.credit|default('')|trim %}
 {% set copyrightnotice = resource.copyrightnotice|default('')|trim %}
+{% set normalized_credit = credit|lower %}
+{% set normalized_copyrightnotice = copyrightnotice|lower %}
 {% if credit is not empty or copyrightnotice is not empty %}
 {% set rights_credit = [] %}
 {% if credit is not empty %}
 {% set rights_credit = rights_credit|merge([credit]) %}
 {% endif %}
-{% if copyrightnotice is not empty and copyrightnotice != credit %}
+{% if copyrightnotice is not empty and normalized_copyrightnotice not in normalized_credit %}
 {% set rights_credit = rights_credit|merge([copyrightnotice]) %}
 {% endif %}
   <dc_rights_credit>{{ rights_credit|join(' | ')|e }}</dc_rights_credit>

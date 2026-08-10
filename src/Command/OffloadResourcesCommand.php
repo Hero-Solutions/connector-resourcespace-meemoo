@@ -15,6 +15,7 @@ use DOMXPath;
 use Exception;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Twig\Environment;
@@ -31,6 +32,8 @@ class OffloadResourcesCommand extends Command
     private bool $dryRun;
     private bool $forceUpdateMetadata;
     private bool $verbose;
+    private ?int $resourceIdFilter;
+    private bool $resourceIdFilterMatched = false;
 
     private FtpUtil $ftpUtil;
     private ResourceSpace $resourceSpace;
@@ -55,6 +58,7 @@ class OffloadResourcesCommand extends Command
     private array $digitizationPartners;
     private array $descriptionFallbackFields = ['inventorynumber'];
     private string $descriptionFallbackSeparator = ' | ';
+    private array $managedNestedMetadataFields = [];
     private string $collectionKey;
     private array $offloadStatusFilter;
     private bool $deleteOriginals;
@@ -63,7 +67,9 @@ class OffloadResourcesCommand extends Command
     private bool $statusUpdateError = false;
     private bool $metadataUpdateError = false;
     private bool $searchError = false;
+    private bool $cursorSafetyError = false;
     private bool $resourceError = false;
+    private array $metadataChangeSummary = array();
 
     private bool $overrideCertificateAuthorityFile;
     private string $sslCertificateAuthorityFile;
@@ -73,13 +79,21 @@ class OffloadResourcesCommand extends Command
     private int $lastMetadataTemplateChange;
     private ?TemplateWrapper $metadataTemplate = null;
 
-    public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $forceUpdate = false, $dryRun = false, ?string $outputSubFolder = null)
+    public function __construct(
+        ParameterBagInterface $params,
+        EntityManagerInterface $entityManager,
+        $forceUpdate = false,
+        $dryRun = false,
+        ?string $outputSubFolder = null,
+        ?int $resourceIdFilter = null
+    )
     {
         $this->params = $params;
         $this->entityManager = $entityManager;
         $this->forceUpdateMetadata = $forceUpdate;
         $this->dryRun = $dryRun;
         $this->outputSubFolder = $outputSubFolder;
+        $this->resourceIdFilter = $resourceIdFilter;
         parent::__construct();
     }
 
@@ -87,7 +101,13 @@ class OffloadResourcesCommand extends Command
     {
         $this
             ->setName('app:offload-resources')
-            ->setDescription('Lists all ResourceSpace resources and offloads all images with the appropriate metadata onto an FTP server. Also updates changed metadata of existing resources in meemoo\'s archive.');
+            ->setDescription('Lists ResourceSpace resources and offloads images with the appropriate metadata onto an FTP server. Also updates changed metadata of existing resources in meemoo\'s archive.')
+            ->addOption(
+                'resource-id',
+                null,
+                InputOption::VALUE_REQUIRED,
+                'Only offload the ResourceSpace resource with this numeric ID; never advances the global offload timestamp.'
+            );
     }
 
     public function setVerbose(bool $verbose): void
@@ -97,6 +117,16 @@ class OffloadResourcesCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $resourceIdOption = $input->getOption('resource-id');
+        if ($resourceIdOption !== null) {
+            if (!is_string($resourceIdOption) || !ctype_digit($resourceIdOption) || (int) $resourceIdOption < 1) {
+                $output->writeln('<error>--resource-id must be a positive numeric ResourceSpace ID.</error>');
+                return Command::INVALID;
+            }
+            $this->resourceIdFilter = (int) $resourceIdOption;
+            echo 'Limiting this offload to ResourceSpace resource ' . $this->resourceIdFilter . '.' . PHP_EOL;
+        }
+
         $this->verbose = $input->getOption('verbose');
         return $this->offloadImages();
     }
@@ -152,13 +182,19 @@ class OffloadResourcesCommand extends Command
         // Automatically determine which ResourceSpace fields are relevant based on the occurrences of 'resource.' in the metadata template.
         $this->relevantResourceSpaceFields = array();
         $metadataTemplate = file_get_contents($this->templateFile);
+        if (!is_string($metadataTemplate)) {
+            die('Metadata template could not be read - exiting.');
+        }
+        $this->managedNestedMetadataFields = $this->extractManagedNestedMetadataFields($metadataTemplate);
         preg_match_all('/[^a-zA-Z0-9\-_]resource\.([a-zA-Z0-9\-_]+)[^a-zA-Z0-9\-_]/', $metadataTemplate, $matches);
         foreach ($matches[1] as $match) {
             if (!in_array($match, $this->relevantResourceSpaceFields)) {
                 $this->relevantResourceSpaceFields[] = $match;
             }
         }
-        foreach (array_merge(['description', 'tmsdescription'], $this->descriptionFallbackFields) as $field) {
+        // Regular descriptions affect existing assets. Fallback-only fields do not: they are used
+        // exclusively during ingest and an ingest already forces metadata generation.
+        foreach (['description', 'tmsdescription'] as $field) {
             if (!in_array($field, $this->relevantResourceSpaceFields)) {
                 $this->relevantResourceSpaceFields[] = $field;
             }
@@ -280,7 +316,13 @@ class OffloadResourcesCommand extends Command
 
         // Loop through all collections
         foreach ($this->collections['values'] as $collection) {
+            if ($this->resourceIdFilter !== null && $this->resourceIdFilterMatched) {
+                break;
+            }
             foreach($this->offloadStatusFilter as $filter) {
+                if ($this->resourceIdFilter !== null && $this->resourceIdFilterMatched) {
+                    break;
+                }
                 $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $this->collectionKey . ':' . $collection . '" "' . $this->offloadStatusField['key'] . ':' . $filter . '"'));
                 if (!is_array($allResources)) {
                     // Never advance the timestamp after a failed search: the resources we did not see
@@ -291,7 +333,16 @@ class OffloadResourcesCommand extends Command
                 }
                 // Loop through all resources in this collection
                 foreach ($allResources as $resourceInfo) {
+                    if ($this->resourceIdFilter !== null && $this->resourceIdFilterMatched) {
+                        break;
+                    }
                     $resourceId = $resourceInfo['ref'];
+                    if ($this->resourceIdFilter !== null && (int) $resourceId !== $this->resourceIdFilter) {
+                        continue;
+                    }
+                    if ($this->resourceIdFilter !== null) {
+                        $this->resourceIdFilterMatched = true;
+                    }
                     if(in_array($resourceId, $alreadyProcessed)) {
                         continue;
                     }
@@ -481,16 +532,41 @@ class OffloadResourcesCommand extends Command
             }
         }
 
+        if ($this->resourceIdFilter !== null && !$this->resourceIdFilterMatched) {
+            echo 'ERROR: ResourceSpace resource ' . $this->resourceIdFilter
+                . ' was not found in the configured collections with a supported offload status.' . PHP_EOL;
+            $this->resourceError = true;
+        }
+
+        $this->logMetadataChangeSummary();
+
         // The cursor represents search coverage, not whether every individual resource succeeded.
         // Known resource failures remain visible through their status/error and must not make all
         // later runs rescan an ever-growing time window.
-        if (!$this->dryRun && !$this->forceUpdateMetadata && !$this->searchError) {
+        if ($this->shouldAdvanceGlobalOffloadTimestamp()) {
             $file = fopen($this->lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
             fwrite($file, $timestamp);
             fclose($file);
-        } else if ($this->searchError) {
-            echo 'WARNING: the last offload timestamp was not updated because ResourceSpace could not be searched completely.' . PHP_EOL;
+        } else {
+            if ($this->searchError) {
+                echo 'WARNING: the last offload timestamp was not updated because ResourceSpace could not be searched completely.' . PHP_EOL;
+            }
+            if ($this->cursorSafetyError) {
+                echo 'WARNING: the last offload timestamp was not updated because a blocked metadata update could not be recorded in ResourceSpace.' . PHP_EOL;
+            }
+            if (!$this->dryRun && !$this->forceUpdateMetadata && $this->resourceIdFilter !== null) {
+                echo 'INFO: the global last offload timestamp was not updated because this was a targeted resource offload.' . PHP_EOL;
+            }
         }
+    }
+
+    private function shouldAdvanceGlobalOffloadTimestamp(): bool
+    {
+        return !$this->dryRun
+            && !$this->forceUpdateMetadata
+            && !$this->searchError
+            && !$this->cursorSafetyError
+            && $this->resourceIdFilter === null;
     }
 
     private function processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension, $offloadFile, $fileModifiedTimestampAsString): void
@@ -524,7 +600,17 @@ class OffloadResourcesCommand extends Command
         }
 
         // Validate metadata before downloading the image. The final XML is regenerated with the real MD5 after download.
-        $domDoc = $this->generateAndValidateXMLFile($resourceId, $resourceMetadata, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate, false);
+        $domDoc = $this->generateAndValidateXMLFile(
+            $resourceId,
+            $resourceMetadata,
+            $uniqueFilename,
+            $xmlFile,
+            $collection,
+            $md5,
+            $creationDate,
+            $offloadFile,
+            false
+        );
         if ($domDoc == null) {
             if ($offloadFile) {
                 $this->markResourceOffloadFailed($resourceId, $resourceMetadata);
@@ -607,7 +693,16 @@ class OffloadResourcesCommand extends Command
         }
 
         if ($offloadMetadata) {
-            $domDoc = $this->generateAndValidateXMLFile($resourceId, $resourceMetadata, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate);
+            $domDoc = $this->generateAndValidateXMLFile(
+                $resourceId,
+                $resourceMetadata,
+                $uniqueFilename,
+                $xmlFile,
+                $collection,
+                $md5,
+                $creationDate,
+                $offloadFile
+            );
             if ($domDoc != null) {
                 $offloaded = $this->offloadResource($resourceId, $resourceMetadata, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
 
@@ -794,6 +889,25 @@ class OffloadResourcesCommand extends Command
         return preg_match('/<' . preg_quote($field, '/') . '[\s>]/', $metadataTemplate) === 1;
     }
 
+    private function extractManagedNestedMetadataFields(string $metadataTemplate): array
+    {
+        $managedFields = [];
+        preg_match_all(
+            '/<([A-Za-z_][A-Za-z0-9_.:-]*)\b[^>]*\btype\s*=\s*["\']list["\'][^>]*>(.*?)<\/\1\s*>/su',
+            $metadataTemplate,
+            $listFields,
+            PREG_SET_ORDER
+        );
+
+        foreach ($listFields as $listField) {
+            $field = $listField[1];
+            preg_match_all('/<([A-Za-z_][A-Za-z0-9_.:-]*)\b[^>]*>/u', $listField[2], $nestedFields);
+            $managedFields[$field] = array_values(array_unique($nestedFields[1] ?? []));
+        }
+
+        return $managedFields;
+    }
+
     // Clears the offload error, but only once the resource is genuinely in sync with meemoo.
     private function clearOffloadError($resourceId, array $resourceMetadata): void
     {
@@ -824,7 +938,17 @@ class OffloadResourcesCommand extends Command
         }
     }
 
-    private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate, bool $writeFile = true): ?DOMDocument
+    private function generateAndValidateXMLFile(
+        $resourceId,
+        $data,
+        $uniqueFilename,
+        $xmlFile,
+        $collection,
+        $md5,
+        $creationDate,
+        bool $isIngest,
+        bool $writeFile = true
+    ): ?DOMDocument
     {
         // Initialize metadata template
         if ($this->metadataTemplate == null) {
@@ -843,8 +967,8 @@ class OffloadResourcesCommand extends Command
 
         // The XSD marks dc_description as optional, but meemoo's ingest requires it to be filled in
         // (confirmed by meemoo via e-mail, July 2026)
-        $mainDescription = $this->getMainDescription($data);
-        if (empty($mainDescription)) {
+        $mainDescription = $this->getMainDescription($data, $isIngest);
+        if ($isIngest && empty($mainDescription)) {
             echo 'ERROR: resource ' . $resourceId . ' is missing a description' . PHP_EOL;
             if (!$this->dryRun) {
                 $this->resourceSpace->updateError($resourceId, $this->errorField, 'Error: description is missing', $data, false, true);
@@ -940,7 +1064,7 @@ class OffloadResourcesCommand extends Command
         return $value !== '' ? $value : 'bestand';
     }
 
-    private function getMainDescription(array $metadata): string
+    private function getMainDescription(array $metadata, bool $allowFallback): string
     {
         $publisher = $this->cleanMetadataText($metadata['publisher'] ?? '');
         $tmsDescription = $this->cleanMetadataText($metadata['tmsdescription'] ?? '');
@@ -952,6 +1076,12 @@ class OffloadResourcesCommand extends Command
 
         if ($description !== '') {
             return $description;
+        }
+
+        // The fallback exists to satisfy meemoo's mandatory ingest description. Existing assets
+        // keep their archived description when ResourceSpace has no regular description.
+        if (!$allowFallback) {
+            return '';
         }
 
         $fallbackValues = [];
@@ -1044,48 +1174,53 @@ class OffloadResourcesCommand extends Command
                         $oldMetadata = $this->filterRelevantFields($oldMetadata);
                         $newMetadata = XMLUtil::convertXmlToArray($domDoc, new DOMXPath($domDoc), null, true);
                         $newMetadata = $this->filterRelevantFields($newMetadata);
+                        $newMetadata = $this->preserveExistingMetadataValues($oldMetadata, $newMetadata);
 
-                        // Create a query to use in the meemoo REST API
-                        $difference = $this->getDifference($oldMetadata, $newMetadata);
-                        if (empty($difference)) {
-                            echo 'No actual difference in metadata for resource ' . $resourceId . ', skipping.' . PHP_EOL;
-                            // Already in sync with meemoo, so any earlier error no longer applies
-                            $this->clearOffloadError($resourceId, $data);
+                        if ($this->blockUnknownNestedKeyRemovals($resourceId, $data, $oldMetadata, $newMetadata)) {
                             $result = false;
                         } else {
-                            $this->logDestructiveMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference);
-                            $descriptiveDifference = [];
-                            // If dc_title or dc_description have changed, then Title and Description also need to be updated as separate fields.
-                            if (array_key_exists($this->oaiPmhApi['title'], $difference)) {
-                                $descriptiveDifference['Title'] = $difference[$this->oaiPmhApi['title']];
-                            }
-                            if (array_key_exists($this->oaiPmhApi['description'], $difference)) {
-                                $descriptiveDifference['Description'] = $difference[$this->oaiPmhApi['description']];
-                            }
-
-                            // Use 'OVERWRITE' merge strategy for every single item
-                            $mergeStrategies = array();
-                            foreach ($difference as $key => $value) {
-                                $mergeStrategies[$key] = 'OVERWRITE';
-                            }
-                            foreach ($descriptiveDifference as $key => $value) {
-                                $mergeStrategies[$key] = 'OVERWRITE';
-                            }
-
-                            if(!empty($descriptiveDifference)) {
-                                $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Descriptive' => $descriptiveDifference, 'Dynamic' => $difference));
+                            // Create a query to use in the meemoo REST API
+                            $difference = $this->getDifference($oldMetadata, $newMetadata);
+                            if (empty($difference)) {
+                                echo 'No actual difference in metadata for resource ' . $resourceId . ', skipping.' . PHP_EOL;
+                                // Already in sync with meemoo, so any earlier error no longer applies
+                                $this->clearOffloadError($resourceId, $data);
+                                $result = false;
                             } else {
-                                $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Dynamic' => $difference));
-                            }
+                                $this->logMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference);
+                                $descriptiveDifference = [];
+                                // If dc_title or dc_description have changed, then Title and Description also need to be updated as separate fields.
+                                if (array_key_exists($this->oaiPmhApi['title'], $difference)) {
+                                    $descriptiveDifference['Title'] = $difference[$this->oaiPmhApi['title']];
+                                }
+                                if (array_key_exists($this->oaiPmhApi['description'], $difference)) {
+                                    $descriptiveDifference['Description'] = $difference[$this->oaiPmhApi['description']];
+                                }
 
-                            if(!$this->dryRun) {
-                                $result = $this->restApi->updateMetadata($collection, $fragmentId, json_encode($query));
-                                if ($result) {
-                                    $this->clearOffloadError($resourceId, $data);
+                                // Use 'OVERWRITE' merge strategy for every single item
+                                $mergeStrategies = array();
+                                foreach ($difference as $key => $value) {
+                                    $mergeStrategies[$key] = 'OVERWRITE';
+                                }
+                                foreach ($descriptiveDifference as $key => $value) {
+                                    $mergeStrategies[$key] = 'OVERWRITE';
+                                }
+
+                                if(!empty($descriptiveDifference)) {
+                                    $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Descriptive' => $descriptiveDifference, 'Dynamic' => $difference));
                                 } else {
-                                    $this->metadataUpdateError = true;
-                                    echo 'ERROR at resource ' . $resourceId . ': the metadata update to meemoo failed.' . PHP_EOL;
-                                    $this->resourceSpace->updateError($resourceId, $this->errorField, 'Metadata update to meemoo failed.', $data, false, true);
+                                    $query = array('Metadata' => array('MergeStrategies' => $mergeStrategies, 'Dynamic' => $difference));
+                                }
+
+                                if(!$this->dryRun) {
+                                    $result = $this->restApi->updateMetadata($collection, $fragmentId, json_encode($query));
+                                    if ($result) {
+                                        $this->clearOffloadError($resourceId, $data);
+                                    } else {
+                                        $this->metadataUpdateError = true;
+                                        echo 'ERROR at resource ' . $resourceId . ': the metadata update to meemoo failed.' . PHP_EOL;
+                                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'Metadata update to meemoo failed.', $data, false, true);
+                                    }
                                 }
                             }
                         }
@@ -1169,6 +1304,113 @@ class OffloadResourcesCommand extends Command
         return $newObject;
     }
 
+    private function preserveExistingMetadataValues(array $oldMetadata, array $newMetadata): array
+    {
+        // A missing regular ResourceSpace description must never wipe or replace an archived
+        // description. Description fallback is reserved for ingest and is therefore absent here.
+        if (!array_key_exists('dc_description', $newMetadata)
+            && array_key_exists('dc_description', $oldMetadata)) {
+            $newMetadata['dc_description'] = $oldMetadata['dc_description'];
+        }
+
+        // These nested values are maintained by meemoo or by an older ingest template. The REST
+        // API overwrites an entire top-level field, so copy them into our payload before diffing.
+        $preservedNestedFields = [
+            'dc_identifier_localids' => ['bestandsnaam', 'Bestandsnaam']
+        ];
+        foreach ($preservedNestedFields as $field => $nestedFields) {
+            if (!array_key_exists($field, $oldMetadata) || !is_array($oldMetadata[$field])) {
+                continue;
+            }
+
+            foreach ($nestedFields as $nestedField) {
+                if (!array_key_exists($nestedField, $oldMetadata[$field])) {
+                    continue;
+                }
+                if (!array_key_exists($field, $newMetadata) || !is_array($newMetadata[$field])) {
+                    $newMetadata[$field] = [];
+                }
+                if (!array_key_exists($nestedField, $newMetadata[$field])) {
+                    $newMetadata[$field][$nestedField] = $oldMetadata[$field][$nestedField];
+                }
+            }
+        }
+
+        return $newMetadata;
+    }
+
+    private function findUnknownNestedKeyRemovals(array $oldMetadata, array $newMetadata): array
+    {
+        $unknownRemovals = [];
+
+        foreach ($oldMetadata as $field => $oldValue) {
+            if (!is_array($oldValue)) {
+                continue;
+            }
+
+            $newValue = array_key_exists($field, $newMetadata) && is_array($newMetadata[$field])
+                ? $newMetadata[$field]
+                : [];
+            $managedNestedFields = $this->managedNestedMetadataFields[$field] ?? [];
+
+            foreach (array_keys($oldValue) as $nestedField) {
+                // Numeric entries are list values, not named metadata subkeys.
+                if (is_int($nestedField)
+                    || array_key_exists($nestedField, $newValue)
+                    || in_array($nestedField, $managedNestedFields, true)) {
+                    continue;
+                }
+
+                $unknownRemovals[$field][] = (string) $nestedField;
+            }
+        }
+
+        return $unknownRemovals;
+    }
+
+    private function blockUnknownNestedKeyRemovals(
+        $resourceId,
+        array $resourceMetadata,
+        array $oldMetadata,
+        array $newMetadata
+    ): bool {
+        $unknownRemovals = $this->findUnknownNestedKeyRemovals($oldMetadata, $newMetadata);
+        if ($unknownRemovals === []) {
+            return false;
+        }
+
+        $paths = [];
+        foreach ($unknownRemovals as $field => $nestedFields) {
+            foreach ($nestedFields as $nestedField) {
+                $paths[] = $field . '.' . $nestedField;
+                echo 'WARNING at resource ' . $resourceId . ': metadata update blocked because existing meemoo subkey "'
+                    . $nestedField . '" in "' . $field
+                    . '" is neither generated by the current template nor explicitly preserved.' . PHP_EOL;
+            }
+        }
+
+        $message = 'Metadata update blocked to protect unmanaged nested meemoo metadata: '
+            . implode(', ', $paths) . '.';
+        $this->metadataUpdateError = true;
+        if (!$this->dryRun) {
+            if (!$this->resourceSpace->updateErrorVerified(
+                $resourceId,
+                $this->errorField,
+                $message,
+                $resourceMetadata[$this->errorField] ?? '',
+                true
+            )) {
+                echo 'ERROR at resource ' . $resourceId
+                    . ': the nested-metadata safeguard warning could not be written to ResourceSpace.' . PHP_EOL;
+                // Without a stored error the resource would not be retried after the global cursor
+                // advances, so keep that cursor in place as a second line of defence.
+                $this->cursorSafetyError = true;
+            }
+        }
+
+        return true;
+    }
+
     private function getDifference($oldMetadata, $newMetadata): array
     {
         $difference = array();
@@ -1197,21 +1439,27 @@ class OffloadResourcesCommand extends Command
         return $difference;
     }
 
-    // Log the old meemoo value of every field this update will empty or overwrite,
-    // so the offload log doubles as a restore record.
-    private function logDestructiveMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference): void
+    // Log every field addition, overwrite and wipe. Existing values make the log usable as a
+    // restore record, while additions make fallback or template migrations fully visible.
+    private function logMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference): void
     {
         foreach ($difference as $key => $newValue) {
             if (!array_key_exists($key, $oldMetadata)) {
-                // New field, nothing gets destroyed
+                $this->recordMetadataChange('ADD', $key);
+                $newValueJson = json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                echo ($this->dryRun ? 'DRY RUN - ' : '') . 'ADD resource ' . $resourceId
+                    . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key
+                    . '", new value: ' . $newValueJson . PHP_EOL;
                 continue;
             }
             $oldValueJson = json_encode($oldMetadata[$key], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($this->isWipeValue($newValue)) {
+                $this->recordMetadataChange('WIPE', $key);
                 echo ($this->dryRun ? 'DRY RUN - ' : '') . 'WIPE resource ' . $resourceId
                     . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key
                     . '", old meemoo value: ' . $oldValueJson . PHP_EOL;
             } else {
+                $this->recordMetadataChange('UPDATE', $key);
                 $newValueJson = json_encode($newValue, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                 echo ($this->dryRun ? 'DRY RUN - ' : '') . 'UPDATE resource ' . $resourceId
                     . ' (' . $collection . ', fragment ' . $fragmentId . '): field "' . $key . '"' . PHP_EOL
@@ -1219,6 +1467,38 @@ class OffloadResourcesCommand extends Command
                     . '    new: ' . $newValueJson . PHP_EOL;
             }
         }
+    }
+
+    private function recordMetadataChange(string $action, string $field): void
+    {
+        if (!array_key_exists($action, $this->metadataChangeSummary)) {
+            $this->metadataChangeSummary[$action] = [];
+        }
+        if (!array_key_exists($field, $this->metadataChangeSummary[$action])) {
+            $this->metadataChangeSummary[$action][$field] = 0;
+        }
+        $this->metadataChangeSummary[$action][$field]++;
+    }
+
+    private function logMetadataChangeSummary(): void
+    {
+        if (!$this->dryRun) {
+            return;
+        }
+
+        echo 'DRY RUN - METADATA CHANGE SUMMARY' . PHP_EOL;
+        $total = 0;
+        foreach (['ADD', 'UPDATE', 'WIPE'] as $action) {
+            $fieldCounts = $this->metadataChangeSummary[$action] ?? [];
+            ksort($fieldCounts);
+            $actionTotal = array_sum($fieldCounts);
+            $total += $actionTotal;
+            echo '  ' . $action . ': ' . $actionTotal . PHP_EOL;
+            foreach ($fieldCounts as $field => $count) {
+                echo '    ' . $field . ': ' . $count . PHP_EOL;
+            }
+        }
+        echo '  TOTAL: ' . $total . PHP_EOL;
     }
 
     private function isWipeValue($value): bool

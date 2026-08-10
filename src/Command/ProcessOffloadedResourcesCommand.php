@@ -7,6 +7,7 @@ use App\Util\DateTimeUtil;
 use App\Util\OaiPmhApiUtil;
 use App\Util\RestApi;
 use DateTime;
+use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Phpoaipmh\Client;
@@ -16,6 +17,7 @@ use Phpoaipmh\Exception\OaipmhException;
 use Phpoaipmh\HttpAdapter\CurlAdapter;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
@@ -32,6 +34,9 @@ class ProcessOffloadedResourcesCommand extends Command
     private string $connectorUrl;
     private bool $processError = false;
     private bool $coverageError = false;
+    private ?int $resourceIdFilter = null;
+    private ?DateTime $fromFilter = null;
+    private ?DateTime $untilFilter = null;
 
     private RestApi $restApi;
     private array $resourcesProcessed;
@@ -48,7 +53,10 @@ class ProcessOffloadedResourcesCommand extends Command
     {
         $this
             ->setName('app:process-offloaded-resources')
-            ->setDescription('Checks the status of the last offloaded images and deletes originals if successful. NOTE: deleting of originals is not yet supported at this time!');
+            ->setDescription('Checks the status of offloaded images and deletes originals if successful.')
+            ->addOption('resource-id', null, InputOption::VALUE_REQUIRED, 'Only repair this numeric ResourceSpace resource ID.')
+            ->addOption('from', null, InputOption::VALUE_REQUIRED, 'Start of the targeted OAI-PMH window (YYYY-MM-DD).')
+            ->addOption('until', null, InputOption::VALUE_REQUIRED, 'End of the targeted OAI-PMH window (YYYY-MM-DD, inclusive).');
     }
 
     public function setVerbose($verbose): void
@@ -58,8 +66,51 @@ class ProcessOffloadedResourcesCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        if (!$this->configureTargetOptions(
+            $input->getOption('resource-id'),
+            $input->getOption('from'),
+            $input->getOption('until'),
+            $output
+        )) {
+            return Command::INVALID;
+        }
         $this->verbose = $input->getOption('verbose');
         return $this->process();
+    }
+
+    public function configureTargetOptions($resourceId, $from, $until, OutputInterface $output): bool
+    {
+        if ($resourceId === null && $from === null && $until === null) {
+            return true;
+        }
+        if (!is_string($resourceId) || !ctype_digit($resourceId) || (int) $resourceId < 1) {
+            $output->writeln('<error>--resource-id must be a positive numeric ResourceSpace ID.</error>');
+            return false;
+        }
+        if (!is_string($from) || !is_string($until)) {
+            $output->writeln('<error>A targeted process requires both --from and --until in YYYY-MM-DD format.</error>');
+            return false;
+        }
+
+        $utc = new DateTimeZone('UTC');
+        $fromDate = DateTime::createFromFormat('!Y-m-d', $from, $utc);
+        $untilDate = DateTime::createFromFormat('!Y-m-d', $until, $utc);
+        if ($fromDate === false || $untilDate === false
+            || $fromDate->format('Y-m-d') !== $from
+            || $untilDate->format('Y-m-d') !== $until) {
+            $output->writeln('<error>--from and --until must be valid dates in YYYY-MM-DD format.</error>');
+            return false;
+        }
+        $untilDate->setTime(23, 59, 59);
+        if ($fromDate > $untilDate) {
+            $output->writeln('<error>--from must not be later than --until.</error>');
+            return false;
+        }
+
+        $this->resourceIdFilter = (int) $resourceId;
+        $this->fromFilter = $fromDate;
+        $this->untilFilter = $untilDate;
+        return true;
     }
 
     // Returns a non-zero exit code when OAI-PMH or ResourceSpace calls failed, so cron notices
@@ -68,63 +119,93 @@ class ProcessOffloadedResourcesCommand extends Command
         $this->resourceSpace = new ResourceSpace($this->params);
         $this->restApi = new RestApi($this->params);
 
-        $lastOffloadTimestampFile = $this->params->get('last_offload_timestamp_file');
-        if (file_exists($lastOffloadTimestampFile)) {
-            $file = fopen($lastOffloadTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
-            // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
-            $lastOffloadTimestamp = intval(fgets($file)) - 7200;
-            fclose($file);
-        } else {
-            die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
-        }
-
-        //Also grab the last processed timestamp in case the OAI-PMH API was having issues
         $lastProcessedTimestampFile = $this->params->get('last_processed_timestamp_file');
-        if (file_exists($lastProcessedTimestampFile)) {
-            $file = fopen($lastProcessedTimestampFile, "r") or die("ERROR: Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
-            // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
-            $lastProcessedTimestamp = intval(fgets($file)) - 7200;
-            fclose($file);
-        } else {
-            die("ERROR: Unable to locate file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
-        }
-
-        //Use the oldest timestamp
-        if($lastProcessedTimestamp < $lastOffloadTimestamp) {
-            $lastOffloadTimestamp = $lastProcessedTimestamp;
-        }
-
         $this->deleteOriginals = $this->params->get('delete_originals');
         $this->connectorUrl = $this->params->get('connector_url');
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
         $collections = $this->params->get('collections');
         $collectionKey = $collections['key'];
-
-        $lastOffloadDateTime = DateTimeUtil::formatTimestampWithTimezone($lastOffloadTimestamp);
-
         $this->resourcesProcessed = array();
 
-        $this->verboseLog('Processing OAI-PMH records since ' . $lastOffloadDateTime . '.');
-        $this->processOaiPmhApi($collections['values'], $lastOffloadDateTime);
-        if ($this->coverageError) {
-            echo 'WARNING: Pending ResourceSpace resources were not marked as missing because the meemoo check was incomplete.' . PHP_EOL;
-        } else {
-            $this->verboseLog('Checking ResourceSpace resources that are still pending.');
-            $this->processMissingResources($collections['values'], $collectionKey);
-        }
+        if ($this->resourceIdFilter !== null) {
+            $resourceReadFailed = false;
+            $rawResourceData = $this->resourceSpace->getRawResourceFieldData($this->resourceIdFilter, $resourceReadFailed);
+            if ($resourceReadFailed || $rawResourceData === null) {
+                echo 'ERROR: Could not retrieve ResourceSpace metadata for resource ' . $this->resourceIdFilter . '.' . PHP_EOL;
+                return 1;
+            }
+            $resourceMetadata = $this->resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
+            $collection = $resourceMetadata[$collectionKey] ?? '';
+            if (!in_array($collection, $collections['values'], true)) {
+                echo 'ERROR: Resource ' . $this->resourceIdFilter . ' has no configured collection.' . PHP_EOL;
+                return 1;
+            }
 
-        if(!$this->dryRun && $this->coverageError === false) {
-            $timestamp = time();
-            $file = fopen($lastProcessedTimestampFile, "w") or die("Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
-            fwrite($file, $timestamp);
-            fclose($file);
+            $this->verboseLog('Searching OAI-PMH collection ' . $collection . ' for ResourceSpace resource '
+                . $this->resourceIdFilter . ' from ' . $this->fromFilter->format(DATE_ATOM)
+                . ' until ' . $this->untilFilter->format(DATE_ATOM) . '.');
+            $this->processOaiPmhApi([$collection], $this->fromFilter, $this->untilFilter);
+            if (!in_array((string) $this->resourceIdFilter, $this->resourcesProcessed, true)) {
+                echo 'ERROR: No completed meemoo record for ResourceSpace resource ' . $this->resourceIdFilter
+                    . ' was found in the selected OAI-PMH window.' . PHP_EOL;
+                $this->processError = true;
+            }
+        } else {
+            $lastOffloadTimestampFile = $this->params->get('last_offload_timestamp_file');
+            if (file_exists($lastOffloadTimestampFile)) {
+                $file = fopen($lastOffloadTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
+                // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
+                $lastOffloadTimestamp = intval(fgets($file)) - 7200;
+                fclose($file);
+            } else {
+                die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
+            }
+
+            // Also grab the last processed timestamp in case the OAI-PMH API was having issues
+            if (file_exists($lastProcessedTimestampFile)) {
+                $file = fopen($lastProcessedTimestampFile, "r") or die("ERROR: Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
+                // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
+                $lastProcessedTimestamp = intval(fgets($file)) - 7200;
+                fclose($file);
+            } else {
+                die("ERROR: Unable to locate file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
+            }
+
+            // Use the oldest timestamp
+            if($lastProcessedTimestamp < $lastOffloadTimestamp) {
+                $lastOffloadTimestamp = $lastProcessedTimestamp;
+            }
+
+            $lastOffloadDateTime = new DateTime(DateTimeUtil::formatTimestampWithTimezone($lastOffloadTimestamp));
+            $this->verboseLog('Processing OAI-PMH records since ' . $lastOffloadDateTime->format(DATE_ATOM) . '.');
+            $this->processOaiPmhApi($collections['values'], $lastOffloadDateTime);
+            if ($this->coverageError) {
+                echo 'WARNING: Pending ResourceSpace resources were not marked as missing because the meemoo check was incomplete.' . PHP_EOL;
+            } else {
+                $this->verboseLog('Checking ResourceSpace resources that are still pending.');
+                $this->processMissingResources($collections['values'], $collectionKey);
+            }
+
+            if ($this->shouldAdvanceLastProcessedTimestamp()) {
+                $timestamp = time();
+                $file = fopen($lastProcessedTimestampFile, "w") or die("Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
+                fwrite($file, $timestamp);
+                fclose($file);
+            }
         }
 
         return $this->processError ? 1 : 0;
     }
 
-    private function processOaiPmhApi($collections, $lastOffloadDateTime): void
+    private function shouldAdvanceLastProcessedTimestamp(): bool
+    {
+        return !$this->dryRun
+            && !$this->coverageError
+            && $this->resourceIdFilter === null;
+    }
+
+    private function processOaiPmhApi($collections, DateTime $from, ?DateTime $until = null): void
     {
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
@@ -136,8 +217,11 @@ class ProcessOffloadedResourcesCommand extends Command
             try {
                 $this->verboseLog('Starting OAI-PMH collection ' . $collection . '.');
                 $oaiPmhEndpoint = OaiPmhApiUtil::connect($this->restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
+                if ($oaiPmhEndpoint === null) {
+                    throw new Exception('Could not connect to the OAI-PMH endpoint.');
+                }
                 $this->verboseLog('Requesting OAI-PMH records for ' . $collection . '.');
-                $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], new DateTime($lastOffloadDateTime));
+                $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], $from, $until);
 
                 foreach($records as $record) {
                     $recordCount++;
@@ -149,6 +233,13 @@ class ProcessOffloadedResourcesCommand extends Command
                         $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath'], $oaiPmhApi['archive_status_xpath'],
                         $oaiPmhApi['resource_data_xpath'] . '/md5',
                         $oaiPmhApi['completed_status']);
+
+                    // A targeted repair needs only the first completed record containing the
+                    // exact ResourceSpace ID. Stop before traversing the rest of the date window.
+                    if ($this->resourceIdFilter !== null
+                        && in_array((string) $this->resourceIdFilter, $this->resourcesProcessed, true)) {
+                        break;
+                    }
                 }
 
                 $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (' . $recordCount . ' records).');
@@ -205,6 +296,10 @@ class ProcessOffloadedResourcesCommand extends Command
         $resourceIds = $record->xpath($resourceIdXpath);
         foreach($resourceIds as $id) {
             $resourceId = strval($id);
+
+            if ($this->resourceIdFilter !== null && (int) $resourceId !== $this->resourceIdFilter) {
+                continue;
+            }
 
             //Only process ResourceSpace ID's (maybe we should work out a more robust mechanism to detect which resources were offloaded through ResourceSpace)
             if(preg_match('/^[0-9]+$/', $resourceId)) {
