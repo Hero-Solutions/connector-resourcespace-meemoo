@@ -61,6 +61,15 @@ To do this, copy 'connector.yml.sample' to 'connector.yml' inside the 'config' d
 Once you have done this, fill in the empty fields next to 'url', 'username' and 'key' under 'resourcespace_api', where you enter the URL of your ResourceSpace installation along with your ResourceSpace username and API key.
 Also copy '.env.sample' to '.env' and fill in the DATABASE_URL parameter with your username, password, host and database name.
 
+The main description falls back to the ResourceSpace inventory number when the regular description is empty. The fallback can be changed in `connector.yml`; multiple fields are combined in the configured order:
+
+```yaml
+description_fallback:
+    fields:
+        - inventorynumber
+    separator: ' | '
+```
+
 ## Usage
 
 To test the meemoo metadata model, run the following command:
@@ -68,7 +77,7 @@ To test the meemoo metadata model, run the following command:
 php bin/console app:test-metadata
 ```
 
-This will generate zero, one or more metadata files inside the folder 'output' based on the template that is defined in 'meemoo_metadata_template.xml' inside the 'config' folder. The amount of files depend on the amount of resources in your ResourceSpace installation that have a non-empty 'offloadStatus'.
+This will generate zero, one or more metadata files inside a timestamped subfolder of 'output/test-metadata' based on the template that is defined in 'meemoo_metadata_template.xml' inside the 'config' folder. The amount of files depend on the amount of resources in your ResourceSpace installation that have a non-empty 'offloadStatus'.
 
 To actually offload files and metadata (or to update metadata of existing resources in meemoo):
 ```
@@ -79,4 +88,3 @@ To check if the last offload was successful and delete the appropriate original 
 ```
 php bin/console app:process-offloaded-resources
 ```
-

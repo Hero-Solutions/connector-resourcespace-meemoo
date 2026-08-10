@@ -28,9 +28,12 @@ class TestMetadataModelCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $cmd = new OffloadResourcesCommand($this->params, $this->entityManager, false, true);
+        // The PID keeps concurrent runs within the same second apart
+        $outputSubFolder = 'test-metadata/' . gmdate('Ymd_His') . '_' . getmypid();
+        echo 'Writing test metadata XML files to output subfolder "' . $outputSubFolder . '".' . PHP_EOL;
+
+        $cmd = new OffloadResourcesCommand($this->params, $this->entityManager, false, true, $outputSubFolder);
         $cmd->setVerbose($input->getOption('verbose'));
-        $cmd->offloadImages();
-        return 0;
+        return $cmd->offloadImages();
     }
 }

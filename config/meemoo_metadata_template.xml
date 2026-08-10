@@ -42,6 +42,9 @@
 {% if artworkcreator|trim is not empty %}
 {% for artworkcreator_value in artworkcreator|split(',') %}
 {% set maker = artworkcreator_value|replace({' (Vervaardiger)': '', '(Vervaardiger)': ''})|trim %}
+{% if maker|slice(-2) == '()' %}
+{% set maker = maker|slice(0, -2)|trim %}
+{% endif %}
 {% if maker is not empty %}
     <Maker>{{ maker|e }}</Maker>
 {% endif %}

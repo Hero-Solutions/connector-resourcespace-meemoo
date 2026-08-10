@@ -30,7 +30,6 @@ class UpdateMetadataCommand extends Command
     {
         $cmd = new OffloadResourcesCommand($this->params, $this->entityManager, true);
         $cmd->setVerbose($input->getOption('verbose'));
-        $cmd->offloadImages();
-        return 0;
+        return $cmd->offloadImages();
     }
 }

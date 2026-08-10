@@ -48,10 +48,26 @@ class ReplaceOriginalCommand extends Command
         $verbose = $input->getOption('verbose');
 
         $resourceSpace = new ResourceSpace($this->params);
-        $rawResourceData = $resourceSpace->getRawResourceFieldData($resourceId);
+        $resourceReadFailed = false;
+        $rawResourceData = $resourceSpace->getRawResourceFieldData($resourceId, $resourceReadFailed);
+        if ($resourceReadFailed) {
+            echo 'ERROR: Could not retrieve ResourceSpace metadata for resource ' . $resourceId . '; original was not replaced.' . PHP_EOL;
+            return 1;
+        }
+        if (!is_array($rawResourceData) || $rawResourceData === []) {
+            echo 'ERROR: Resource ' . $resourceId . ' was not found in ResourceSpace; original was not replaced.' . PHP_EOL;
+            return 1;
+        }
+
         $resourceMetadata = $resourceSpace->getResourceFieldDataAsAssocArray($rawResourceData);
-        $data = $resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
+        $originalFilename = $resourceMetadata['originalfilename'] ?? null;
+        if (!is_string($originalFilename) || trim($originalFilename) === '') {
+            echo 'ERROR: Resource ' . $resourceId . ' has no original filename; original was not replaced.' . PHP_EOL;
+            return 1;
+        }
+
+        $data = $resourceSpace->replaceOriginal($resourceId, $originalFilename, $this->entityManager);
         var_dump($data);
-        return 0;
+        return ($data['status'] ?? false) ? 0 : 1;
     }
 }

@@ -43,9 +43,9 @@ class OffloadResourcesCommand extends Command
     private array $relevantMetadataFields;
     private string $lastTimestampFile;
     private string $outputFolder;
+    private ?string $outputSubFolder;
     private string $templateFile;
     private string $templateXsdSchemaFile;
-    private array $allImageTypes;
     private array $supportedExtensions;
     private array $collections;
     private array $offloadStatusField;
@@ -53,9 +53,17 @@ class OffloadResourcesCommand extends Command
     private string $errorField;
     private array $conversionTable;
     private array $digitizationPartners;
+    private array $descriptionFallbackFields = ['inventorynumber'];
+    private string $descriptionFallbackSeparator = ' | ';
     private string $collectionKey;
     private array $offloadStatusFilter;
     private bool $deleteOriginals;
+    private bool $uploadError = false;
+    private bool $md5BackfillFailed = false;
+    private bool $statusUpdateError = false;
+    private bool $metadataUpdateError = false;
+    private bool $searchError = false;
+    private bool $resourceError = false;
 
     private bool $overrideCertificateAuthorityFile;
     private string $sslCertificateAuthorityFile;
@@ -65,12 +73,13 @@ class OffloadResourcesCommand extends Command
     private int $lastMetadataTemplateChange;
     private ?TemplateWrapper $metadataTemplate = null;
 
-    public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $forceUpdate = false, $dryRun = false)
+    public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $forceUpdate = false, $dryRun = false, ?string $outputSubFolder = null)
     {
         $this->params = $params;
         $this->entityManager = $entityManager;
         $this->forceUpdateMetadata = $forceUpdate;
         $this->dryRun = $dryRun;
+        $this->outputSubFolder = $outputSubFolder;
         parent::__construct();
     }
 
@@ -96,12 +105,19 @@ class OffloadResourcesCommand extends Command
     {
         $this->init();
         $this->processCollections();
-        return 0;
+        // Preserve non-zero reporting for operational failures. Only incomplete ResourceSpace
+        // search coverage blocks the cursor; individual resources remain available for manual follow-up.
+        return ($this->uploadError
+            || $this->statusUpdateError
+            || $this->metadataUpdateError
+            || $this->searchError
+            || $this->resourceError) ? 1 : 0;
     }
 
     private function init(): void
     {
         $this->deleteOriginals = $this->params->get('delete_originals');
+        $this->initDescriptionFallback();
 
         $this->resourceSpace = new ResourceSpace($this->params);
         $this->ftpUtil = new FtpUtil($this->params);
@@ -115,9 +131,15 @@ class OffloadResourcesCommand extends Command
             fclose($file);
         }
 
-        $this->outputFolder = $this->params->get('output_folder');
+        $configuredOutputFolder = $this->params->get('output_folder');
+        // Keep the trailing separator when it is the whole path (e.g. an absolute root like '/')
+        $trimmedOutputFolder = rtrim($configuredOutputFolder, '/\\');
+        $this->outputFolder = $trimmedOutputFolder !== '' ? $trimmedOutputFolder : $configuredOutputFolder;
+        if ($this->outputSubFolder !== null && trim($this->outputSubFolder, '/\\') !== '') {
+            $this->outputFolder = rtrim($this->outputFolder, '/\\') . '/' . trim($this->outputSubFolder, '/\\');
+        }
         if (!is_dir($this->outputFolder)) {
-            mkdir($this->outputFolder);
+            mkdir($this->outputFolder, 0777, true);
         }
 
         $this->templateFile = $this->params->get('template_file');
@@ -136,7 +158,7 @@ class OffloadResourcesCommand extends Command
                 $this->relevantResourceSpaceFields[] = $match;
             }
         }
-        foreach (['description', 'tmsdescription'] as $field) {
+        foreach (array_merge(['description', 'tmsdescription'], $this->descriptionFallbackFields) as $field) {
             if (!in_array($field, $this->relevantResourceSpaceFields)) {
                 $this->relevantResourceSpaceFields[] = $field;
             }
@@ -148,6 +170,7 @@ class OffloadResourcesCommand extends Command
         }
 
         $this->relevantMetadataFields = array();
+        $unmanagedMetadataFields = array();
         // Grab all the relevant top-level metadata fields from the XSD schema
         $domDocument = new DOMDocument();
         $domDocument->loadXML(file_get_contents($this->templateXsdSchemaFile));
@@ -162,7 +185,14 @@ class OffloadResourcesCommand extends Command
                         if ($attribute->nodeName == 'name') {
                             // md5 is a special field, we want to exclude this one
                             if($attribute->nodeValue != 'md5' && !in_array($attribute->nodeValue, $this->relevantMetadataFields)) {
-                                $this->relevantMetadataFields[] = $attribute->nodeValue;
+                                // Only fields this template can actually produce may be overwritten or
+                                // emptied at meemoo. Anything else (populated by meemoo or another source)
+                                // must be left alone, otherwise getDifference() would wipe it.
+                                if ($this->isFieldManagedByTemplate($attribute->nodeValue, $metadataTemplate)) {
+                                    $this->relevantMetadataFields[] = $attribute->nodeValue;
+                                } else if (!in_array($attribute->nodeValue, $unmanagedMetadataFields)) {
+                                    $unmanagedMetadataFields[] = $attribute->nodeValue;
+                                }
                             }
                             break;
                         }
@@ -170,9 +200,11 @@ class OffloadResourcesCommand extends Command
                 }
             }
         }
-        $this->relevantMetadataFields[] = 'dcterms_created';
+        if ($this->verbose && !empty($unmanagedMetadataFields)) {
+            echo 'INFO: these meemoo fields are not produced by the template and will never be overwritten or emptied: '
+                . implode(', ', $unmanagedMetadataFields) . PHP_EOL;
+        }
 
-        $this->allImageTypes = $this->params->get('all_image_types');
         $this->supportedExtensions = $this->params->get('supported_extensions');
         $this->mandatoryResourceSpaceFields = $this->params->get('mandatory_resourcespace_fields');
         $this->forbiddenResourceSpaceFields = $this->params->get('forbidden_resourcespace_fields');
@@ -202,6 +234,44 @@ class OffloadResourcesCommand extends Command
         $this->oaiPmhApi = $this->params->get('oai_pmh_api');
     }
 
+    private function initDescriptionFallback(): void
+    {
+        if (!$this->params->has('description_fallback')) {
+            return;
+        }
+
+        $config = $this->params->get('description_fallback');
+        if (!is_array($config)) {
+            throw new \InvalidArgumentException('The "description_fallback" configuration must be a YAML mapping.');
+        }
+
+        if (array_key_exists('fields', $config)) {
+            if (!is_array($config['fields'])) {
+                throw new \InvalidArgumentException('The "description_fallback.fields" configuration must be a YAML list.');
+            }
+
+            $fields = [];
+            foreach ($config['fields'] as $field) {
+                if (!is_string($field) || trim($field) === '') {
+                    throw new \InvalidArgumentException('Every entry in "description_fallback.fields" must be a non-empty ResourceSpace field name.');
+                }
+                $fields[] = trim($field);
+            }
+
+            if ($fields === []) {
+                throw new \InvalidArgumentException('The "description_fallback.fields" configuration must contain at least one ResourceSpace field name.');
+            }
+            $this->descriptionFallbackFields = array_values(array_unique($fields));
+        }
+
+        if (array_key_exists('separator', $config)) {
+            if (!is_string($config['separator'])) {
+                throw new \InvalidArgumentException('The "description_fallback.separator" configuration must be a string.');
+            }
+            $this->descriptionFallbackSeparator = $config['separator'];
+        }
+    }
+
     private function processCollections(): void
     {
         // Keep track of resource ID's that are already processed to prevent duplicates (duplicates may emerge through different searches)
@@ -212,6 +282,13 @@ class OffloadResourcesCommand extends Command
         foreach ($this->collections['values'] as $collection) {
             foreach($this->offloadStatusFilter as $filter) {
                 $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $this->collectionKey . ':' . $collection . '" "' . $this->offloadStatusField['key'] . ':' . $filter . '"'));
+                if (!is_array($allResources)) {
+                    // Never advance the timestamp after a failed search: the resources we did not see
+                    // would otherwise be considered up to date and never be revisited.
+                    echo 'ERROR: Could not retrieve ResourceSpace resources for ' . $collection . ' with status "' . $filter . '".' . PHP_EOL;
+                    $this->searchError = true;
+                    continue;
+                }
                 // Loop through all resources in this collection
                 foreach ($allResources as $resourceInfo) {
                     $resourceId = $resourceInfo['ref'];
@@ -221,29 +298,86 @@ class OffloadResourcesCommand extends Command
                     $alreadyProcessed[] = $resourceId;
 
                     // Get this resource's metadata, but only if it has an appropriate offloadStatus
-                    $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains($resourceId, $this->offloadStatusField['key'], $this->offloadStatusFilter);
+                    $metadataReadFailed = false;
+                    $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains(
+                        $resourceId,
+                        $this->offloadStatusField['key'],
+                        $this->offloadStatusFilter,
+                        $metadataReadFailed
+                    );
+                    if ($metadataReadFailed) {
+                        echo 'ERROR: Could not retrieve ResourceSpace metadata for resource ' . $resourceId . '.' . PHP_EOL;
+                        $this->resourceError = true;
+                        continue;
+                    }
                     if ($resourceMetadata != null) {
                         if (array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
                             if ($resourceMetadata[$this->offloadStatusField['key']] == $this->offloadStatusField['values']['offloaded_now_delete_original']) {
-                                if(!array_key_exists($this->resourceSpaceMetadataFields['meemoo_image_url'], $resourceMetadata)) {
-                                    echo 'Error: cannot replace resource, meemoo original image URL missing.' . PHP_EOL;
-                                    if(!$this->dryRun) {
-                                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'Error: meemoo original asset URL missing', $resourceMetadata, false, true);
-                                    }
-                                } else if(empty($resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']])) {
-                                    echo 'Error: cannot replace resource, meemoo original image URL missing.' . PHP_EOL;
-                                    if(!$this->dryRun) {
-                                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'Error: meemoo original asset URL missing', $resourceMetadata, false, true);
-                                    }
+                                $assetUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_asset_url']] ?? '';
+                                $imageUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']] ?? '';
+                                if(empty($assetUrl)) {
+                                    $this->failResourceFinalization(
+                                        $resourceId,
+                                        'Cannot replace resource: meemoo asset URL is missing.',
+                                        $resourceMetadata[$this->errorField] ?? ''
+                                    );
+                                    continue;
+                                } else if(empty($imageUrl)) {
+                                    $this->failResourceFinalization(
+                                        $resourceId,
+                                        'Cannot replace resource: meemoo original download URL is missing.',
+                                        $resourceMetadata[$this->errorField] ?? ''
+                                    );
+                                    continue;
                                 } else {
                                     echo 'Replacing resource ' . $resourceId . ', as it has status \'Offloaded now delete original\'.' . PHP_EOL;
                                     if (!$this->dryRun) {
-                                        $this->resourceSpace->updateField($resourceId, $this->offloadStatusField['key'], $this->offloadStatusField['values']['offloaded']);
                                         if ($this->deleteOriginals) {
-                                            $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'], $this->entityManager);
-                                            if ($result['status'] === false) {
-                                                $this->resourceSpace->updateError($resourceId, $this->errorField, $result['message'], $resourceMetadata, false, true);
+                                            $originalFilename = $resourceMetadata['originalfilename'] ?? null;
+                                            if (!$this->resourceSpace->isReplacementFilename($resourceId, $originalFilename)) {
+                                                $replacementSafetyError = $this->getManualReplacementSafetyError(
+                                                    $resourceId,
+                                                    $originalFilename,
+                                                    (string) $assetUrl,
+                                                    $collection
+                                                );
+                                                if ($replacementSafetyError !== null) {
+                                                    $this->failResourceFinalization(
+                                                        $resourceId,
+                                                        $replacementSafetyError,
+                                                        $resourceMetadata[$this->errorField] ?? ''
+                                                    );
+                                                    continue;
+                                                }
                                             }
+
+                                            $result = $this->resourceSpace->replaceOriginal($resourceId, $resourceMetadata['originalfilename'] ?? null, $this->entityManager);
+                                            $replaceMessage = is_string($result['message'] ?? null)
+                                                ? $result['message']
+                                                : json_encode($result['message'] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                                            if (($result['status'] ?? false) !== true) {
+                                                $this->failResourceFinalization(
+                                                    $resourceId,
+                                                    'Error replacing original: ' . $replaceMessage,
+                                                    $resourceMetadata[$this->errorField] ?? ''
+                                                );
+                                                continue;
+                                            }
+                                        }
+                                        if (!$this->clearFinalizationError($resourceId, $resourceMetadata[$this->errorField] ?? '')) {
+                                            continue;
+                                        }
+                                        if (!$this->resourceSpace->updateFieldVerified(
+                                            $resourceId,
+                                            $this->offloadStatusField['key'],
+                                            $this->offloadStatusField['values']['offloaded']
+                                        )) {
+                                            $this->failResourceFinalization(
+                                                $resourceId,
+                                                'Original was handled, but the final Offloaded status could not be written to ResourceSpace.',
+                                                ''
+                                            );
+                                            continue;
                                         }
                                     }
                                     continue;
@@ -316,13 +450,10 @@ class OffloadResourcesCommand extends Command
                                 }
                             }
                             if($offloadFile) {
-                                foreach ($this->allImageTypes as $imageType) {
-                                    if (preg_match('/.*' . $resourceId . $imageType . '.*/', $resourceMetadata['originalfilename']) === 1) {
-                                        $offloadFile = false;
-                                        if ($this->verbose) {
-                                            echo 'INFO: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has not been offloaded, as it is a replacement of an original.' . PHP_EOL;
-                                        }
-                                        break;
+                                if ($this->resourceSpace->isReplacementFilename($resourceId, $resourceMetadata['originalfilename'])) {
+                                    $offloadFile = false;
+                                    if ($this->verbose) {
+                                        echo 'INFO: File ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ') has not been offloaded, as it is a replacement of an original.' . PHP_EOL;
                                     }
                                 }
                             }
@@ -350,10 +481,15 @@ class OffloadResourcesCommand extends Command
             }
         }
 
-        if (!$this->dryRun && !$this->forceUpdateMetadata) {
+        // The cursor represents search coverage, not whether every individual resource succeeded.
+        // Known resource failures remain visible through their status/error and must not make all
+        // later runs rescan an ever-growing time window.
+        if (!$this->dryRun && !$this->forceUpdateMetadata && !$this->searchError) {
             $file = fopen($this->lastTimestampFile, "w") or die("Unable to open file containing last offload timestamp ('" . $this->lastTimestampFile . "').");
             fwrite($file, $timestamp);
             fclose($file);
+        } else if ($this->searchError) {
+            echo 'WARNING: the last offload timestamp was not updated because ResourceSpace could not be searched completely.' . PHP_EOL;
         }
     }
 
@@ -368,54 +504,133 @@ class OffloadResourcesCommand extends Command
         $uniqueFilenameWithoutExtension = $resourceId . '_' . $safeStem;
         $uniqueFilename = $uniqueFilenameWithoutExtension . '.' . $extension;
 
-        $calculateMd5 = false;
-        if($offloadFile) {
-            $calculateMd5 = true;
-        } else if(!array_key_exists('md5checksum', $resourceMetadata)) {
-            $calculateMd5 = true;
-        } else if(empty($resourceMetadata['md5checksum'])) {
-            $calculateMd5 = true;
+        $this->md5BackfillFailed = false;
+        $localFilename = null;
+        $xmlFile = $this->outputFolder . '/' . $uniqueFilenameWithoutExtension . '.xml';
+        $metadataModifiedDate = $resourceInfo['modified'] ?? '';
+        $creationDate = $resourceInfo['creation_date'] ?? '';
+        $offloadFileBeforeDuplicateCheck = $offloadFile;
+        $offloadMetadata = $this->shouldOffloadMetadata($resourceId, $resourceInfo, $resourceMetadata, $offloadFile);
+
+        if (!$offloadMetadata) {
+            return;
         }
 
-        $localFilename = null;
-        if($calculateMd5) {
+        $md5 = $offloadFile ? '' : ($resourceMetadata['md5checksum'] ?? '');
+        $md5IsKnown = (bool) preg_match('/^[0-9A-Fa-f]{32}$/', $md5);
+        if (!$md5IsKnown) {
+            // Placeholder for the pre-validation pass only; the real checksum is calculated below.
+            $md5 = str_repeat('0', 32);
+        }
+
+        // Validate metadata before downloading the image. The final XML is regenerated with the real MD5 after download.
+        $domDoc = $this->generateAndValidateXMLFile($resourceId, $resourceMetadata, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate, false);
+        if ($domDoc == null) {
+            if ($offloadFile) {
+                $this->markResourceOffloadFailed($resourceId, $resourceMetadata);
+            }
+            return;
+        }
+
+        if($offloadFile) {
             $localFilename = $this->outputFolder . '/' . $uniqueFilename;
             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
-            copy($resourceUrl, $localFilename);
-            $md5 = md5_file($localFilename);
+            if (!is_string($resourceUrl) || $resourceUrl === '' || !$this->resourceSpace->downloadFileVerified($resourceUrl, $localFilename)) {
+                $this->failResourceOffload($resourceId, $resourceMetadata, 'Could not download resource file for offload.');
+                $offloadMetadata = false;
+            } else {
+                $md5 = md5_file($localFilename);
+                if (!is_string($md5) || !preg_match('/^[0-9A-Fa-f]{32}$/', $md5)) {
+                    $this->failResourceOffload($resourceId, $resourceMetadata, 'Could not calculate MD5 checksum for downloaded file.');
+                    $offloadMetadata = false;
+                } else {
+                    if(!$this->dryRun) {
+                        $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+                    }
 
-            if(!$this->dryRun) {
-                $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
+                    // Prevent files with duplicate MD5 checksums from being offloaded
+                    $existingChecksums = $this->entityManager->createQueryBuilder()
+                        ->select('i')
+                        ->from(FileChecksum::class, 'i')
+                        ->where('i.fileChecksum = :checksum')
+                        ->setParameter('checksum', $md5)
+                        ->getQuery()
+                        ->getResult();
+                    foreach ($existingChecksums as $existingChecksum) {
+                        $offloadFile = false;
+                        // A checksum row only proves these bytes were uploaded at some point, not that
+                        // that upload is still awaiting ingest, so this always stays a hard failure.
+                        // Only the message differs, to tell the two situations apart.
+                        if ((int) $existingChecksum->getResourceId() === (int) $resourceId) {
+                            $duplicateMessage = 'This exact file was already offloaded for this same resource. Remove its checksum from the database to force a new offload.';
+                        } else {
+                            $duplicateMessage = 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').';
+                        }
+                        echo 'ERROR at resource ' . $resourceId . ': ' . $duplicateMessage . PHP_EOL;
+                        if (!$this->dryRun) {
+                            $statusKey = $this->offloadStatusField['key'];
+                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+                                $this->resourceSpace->updateError($resourceId, $this->errorField, $duplicateMessage, $resourceMetadata, false, true);
+                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']) {
+                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
+                                $this->resourceSpace->updateError($resourceId, $this->errorField, $duplicateMessage, $resourceMetadata, false, true);
+                            }
+                        }
+                    }
+                }
             }
-        } else {
-            $md5 = $resourceMetadata['md5checksum'];
-        }
-
-        if($offloadFile) {
-            // Prevent files with duplicate MD5 checksums from being offloaded
-            $existingChecksums = $this->entityManager->createQueryBuilder()
-                ->select('i')
-                ->from(FileChecksum::class, 'i')
-                ->where('i.fileChecksum = :checksum')
-                ->setParameter('checksum', $md5)
-                ->getQuery()
-                ->getResult();
-            foreach ($existingChecksums as $existingChecksum) {
-                $offloadFile = false;
-                echo 'ERROR at resource ' . $resourceId . ': this exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').' . PHP_EOL;
-                if (!$this->dryRun) {
-                    $statusKey = $this->offloadStatusField['key'];
-                    if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']) {
-                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', $resourceMetadata, false, true);
-                    } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']) {
-                        $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
-                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').', $resourceMetadata, false, true);
+        } else if (!$md5IsKnown) {
+            // Metadata-only update of a resource without a stored checksum: download the file to
+            // backfill md5checksum in ResourceSpace. If that fails, the XML keeps the placeholder
+            // (md5 is mandatory in the XSD but filtered out of the meemoo update), so we flag it in
+            // the error field: a non-empty error field makes the next run retry this resource.
+            $localFilename = $this->outputFolder . '/' . $uniqueFilename;
+            $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
+            if (!is_string($resourceUrl) || $resourceUrl === '' || !$this->resourceSpace->downloadFileVerified($resourceUrl, $localFilename)) {
+                $this->warnMissingMd5($resourceId, $resourceMetadata, 'Could not download the file to calculate its missing MD5 checksum.');
+            } else {
+                $calculatedMd5 = md5_file($localFilename);
+                if (!is_string($calculatedMd5) || !preg_match('/^[0-9A-Fa-f]{32}$/', $calculatedMd5)) {
+                    $this->warnMissingMd5($resourceId, $resourceMetadata, 'Could not calculate the missing MD5 checksum.');
+                } else {
+                    $md5 = $calculatedMd5;
+                    if (!$this->dryRun) {
+                        $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
                     }
                 }
             }
         }
 
+        if ($offloadFile !== $offloadFileBeforeDuplicateCheck) {
+            $offloadMetadata = $this->shouldOffloadMetadata($resourceId, $resourceInfo, $resourceMetadata, $offloadFile);
+        }
+
+        if ($offloadMetadata) {
+            $domDoc = $this->generateAndValidateXMLFile($resourceId, $resourceMetadata, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate);
+            if ($domDoc != null) {
+                $offloaded = $this->offloadResource($resourceId, $resourceMetadata, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
+
+                if ($this->verbose) {
+                    if ($offloaded && $offloadFile) {
+                        echo 'Resource file ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedTimestampAsString . ') has been offloaded' . PHP_EOL;
+                    }
+                    if ($offloaded) {
+                        echo 'Metadata ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') has been offloaded' . PHP_EOL;
+                    }
+                }
+            } else if ($offloadFile) {
+                $this->markResourceOffloadFailed($resourceId, $resourceMetadata);
+            }
+        }
+
+        if($localFilename !== null && file_exists($localFilename)) {
+            unlink($localFilename);
+        }
+    }
+
+    private function shouldOffloadMetadata($resourceId, array $resourceInfo, array $resourceMetadata, bool $offloadFile): bool
+    {
         $offloadMetadata = $this->forceUpdateMetadata;
         // Always offload the metadata if the file is to be offloaded or if the metadata template has changed since the last offload or if there is an offload error
         if ($offloadFile || $this->lastMetadataTemplateChange > $this->lastOffloadTimestamp) {
@@ -429,56 +644,187 @@ class OffloadResourcesCommand extends Command
             }
         }
 
-        if ($offloadMetadata || array_key_exists('modified', $resourceInfo)) {
-            $metadataModifiedDate = $resourceInfo['modified'];
-            if (!$offloadMetadata) {
-                if (strlen($metadataModifiedDate) > 0) {
-                    // Check if the resource was modified since the last offload
-                    if (strtotime($metadataModifiedDate) > $this->lastOffloadTimestamp) {
-                        // Check if any of the relevant ResourceSpace fields has changed since the last offload
-                        $offloadMetadata = $this->resourceSpace->didRelevantMetadataChange($resourceId, DateTimeUtil::formatTimestampSimple($this->lastOffloadTimestamp), $this->relevantResourceSpaceFields);
-                    }
-                }
-            }
-            if ($offloadMetadata) {
-                $xmlFile = $this->outputFolder . '/' . $uniqueFilenameWithoutExtension . '.xml';
-                $domDoc = $this->generateAndValidateXMLFile($resourceId, $resourceMetadata, $uniqueFilename, $xmlFile, $collection, $md5, $resourceInfo['creation_date']);
-                if ($domDoc != null) {
-                    $offloaded = $this->offloadResource($resourceId, $resourceMetadata, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
-
-                    if ($this->verbose) {
-                        if ($offloadFile) {
-                            echo 'Resource file ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $fileModifiedTimestampAsString . ') has been offloaded' . PHP_EOL;
-                        }
-                        if ($offloaded) {
-                            echo 'Metadata ' . $resourceMetadata['originalfilename'] . ' (resource ' . $resourceId . ', modified ' . $metadataModifiedDate . ') has been offloaded' . PHP_EOL;
-                        }
-                    }
-                } else if ($offloadFile) {
-
-                    // Only set status to 'failed' if we actually wanted to offload the file, NOT when we're only updating metadata
-                    if (!$this->dryRun) {
-                        $statusKey = $this->offloadStatusField['key'];
-                        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']) {
-                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
-                            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
-                            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
-                        }
-                    }
+        $metadataModifiedDate = $resourceInfo['modified'] ?? '';
+        if (!$offloadMetadata && strlen($metadataModifiedDate) > 0) {
+            // Check if the resource was modified since the last offload
+            if (strtotime($metadataModifiedDate) > $this->lastOffloadTimestamp) {
+                // Check if any of the relevant ResourceSpace fields has changed since the last offload
+                $logReadFailed = false;
+                $offloadMetadata = $this->resourceSpace->didRelevantMetadataChange(
+                    $resourceId,
+                    DateTimeUtil::formatTimestampSimple($this->lastOffloadTimestamp),
+                    $this->relevantResourceSpaceFields,
+                    $logReadFailed
+                );
+                if ($logReadFailed) {
+                    echo 'ERROR: Could not retrieve the ResourceSpace change log for resource ' . $resourceId . '.' . PHP_EOL;
+                    $this->resourceError = true;
+                    return false;
                 }
             }
         }
 
-        if($localFilename !== null && file_exists($localFilename)) {
-            unlink($localFilename);
+        return $offloadMetadata;
+    }
+
+    private function markResourceOffloadFailed($resourceId, array $resourceMetadata): void
+    {
+        // Only set status to 'failed' if we actually wanted to offload the file, NOT when we're only updating metadata
+        if ($this->dryRun) {
+            return;
+        }
+
+        $statusKey = $this->offloadStatusField['key'];
+        if (!array_key_exists($statusKey, $resourceMetadata)) {
+            return;
+        }
+
+        if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
+            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']
+            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded']) {
+            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
+        } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']
+            || $resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
+            $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
         }
     }
 
-    private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate): ?DOMDocument
+    private function failResourceFinalization($resourceId, string $message, $currentError = ''): void
+    {
+        echo 'ERROR at resource ' . $resourceId . ': ' . $message . PHP_EOL;
+        $this->statusUpdateError = true;
+
+        if ($this->dryRun) {
+            return;
+        }
+
+        if (!$this->resourceSpace->updateErrorVerified(
+            $resourceId,
+            $this->errorField,
+            $message,
+            $currentError,
+            true
+        )) {
+            echo 'ERROR at resource ' . $resourceId . ': the finalization error could not be written to ResourceSpace.' . PHP_EOL;
+        }
+    }
+
+    private function clearFinalizationError($resourceId, $currentError = ''): bool
+    {
+        if ($this->dryRun) {
+            return true;
+        }
+
+        if ($this->resourceSpace->updateErrorVerified($resourceId, $this->errorField, '', $currentError)) {
+            return true;
+        }
+
+        echo 'ERROR at resource ' . $resourceId . ': the previous finalization error could not be cleared in ResourceSpace.' . PHP_EOL;
+        $this->statusUpdateError = true;
+        return false;
+    }
+
+    private function getManualReplacementSafetyError($resourceId, $originalFilename, string $storedAssetUrls, string $collection): ?string
+    {
+        if (!is_string($originalFilename) || trim($originalFilename) === '') {
+            return 'Cannot safely replace the original because its filename is missing.';
+        }
+
+        $extension = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
+        if ($extension === '') {
+            return 'Cannot safely replace the original because its file extension is missing.';
+        }
+
+        $currentMd5 = $this->resourceSpace->getOriginalFileMd5($resourceId, $extension);
+        if ($currentMd5 === null) {
+            return 'Cannot safely replace the original because the current ResourceSpace file could not be downloaded and verified.';
+        }
+
+        $validArchivedMd5Found = false;
+        foreach (array_reverse($this->splitStoredUrls($storedAssetUrls)) as $assetUrl) {
+            $identifierPosition = strrpos($assetUrl, '/');
+            if ($identifierPosition === false || $identifierPosition === strlen($assetUrl) - 1) {
+                continue;
+            }
+
+            $identifier = rawurldecode(substr($assetUrl, $identifierPosition + 1));
+            $meemooUrl = $this->oaiPmhApi['url']
+                . '?verb=GetRecord&metadataPrefix=' . urlencode($this->oaiPmhApi['metadata_prefix'])
+                . '&identifier=' . urlencode($identifier);
+            $archivedMetadata = $this->getCurrentMeemooMetadata($meemooUrl, $collection);
+            $archivedMd5 = $this->normalizeMd5($archivedMetadata['data']['md5'] ?? null);
+            if ($archivedMd5 === null) {
+                continue;
+            }
+
+            $validArchivedMd5Found = true;
+            if (hash_equals($archivedMd5, $currentMd5)) {
+                return null;
+            }
+        }
+
+        if (!$validArchivedMd5Found) {
+            return 'Cannot safely replace the original because no stored meemoo asset contains a valid MD5 checksum.';
+        }
+
+        return 'The current ResourceSpace original does not match any MD5 checksum archived by meemoo; the original was not replaced.';
+    }
+
+    private function splitStoredUrls(string $storedUrls): array
+    {
+        $urls = preg_split('/\R+/', $storedUrls) ?: [];
+        return array_values(array_filter(array_map('trim', $urls), static fn(string $url): bool => $url !== ''));
+    }
+
+    private function normalizeMd5($value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $checksum = strtolower(trim($value));
+        return preg_match('/^[0-9a-f]{32}$/', $checksum) === 1 ? $checksum : null;
+    }
+
+    // A field counts as managed when the template contains it as an XML element, so it can be
+    // rendered for at least some resources (most are wrapped in conditionals).
+    private function isFieldManagedByTemplate(string $field, string $metadataTemplate): bool
+    {
+        return preg_match('/<' . preg_quote($field, '/') . '[\s>]/', $metadataTemplate) === 1;
+    }
+
+    // Clears the offload error, but only once the resource is genuinely in sync with meemoo.
+    private function clearOffloadError($resourceId, array $resourceMetadata): void
+    {
+        // Keep the error field when the MD5 backfill failed, so the next run retries this resource
+        if ($this->dryRun || $this->md5BackfillFailed) {
+            return;
+        }
+        $this->resourceSpace->updateError($resourceId, $this->errorField, '', $resourceMetadata);
+    }
+
+    // Records a failed MD5 backfill without touching the offload status: flipping an already
+    // offloaded resource to 'Failed' would trigger a new file offload that the checksum guard blocks.
+    private function warnMissingMd5($resourceId, array $resourceMetadata, string $message): void
+    {
+        echo 'WARNING at resource ' . $resourceId . ': ' . $message . PHP_EOL;
+        $this->md5BackfillFailed = true;
+        if (!$this->dryRun) {
+            $this->resourceSpace->updateError($resourceId, $this->errorField, $message, $resourceMetadata, false, true);
+        }
+    }
+
+    private function failResourceOffload($resourceId, array $resourceMetadata, string $message): void
+    {
+        echo 'ERROR at resource ' . $resourceId . ': ' . $message . PHP_EOL;
+        $this->markResourceOffloadFailed($resourceId, $resourceMetadata);
+        if (!$this->dryRun) {
+            $this->resourceSpace->updateError($resourceId, $this->errorField, $message, $resourceMetadata, false, true);
+        }
+    }
+
+    private function generateAndValidateXMLFile($resourceId, $data, $uniqueFilename, $xmlFile, $collection, $md5, $creationDate, bool $writeFile = true): ?DOMDocument
     {
         // Initialize metadata template
         if ($this->metadataTemplate == null) {
@@ -534,7 +880,9 @@ class OffloadResourcesCommand extends Command
         }
         $validated = false;
 
-        file_put_contents($xmlFile, $xmlData);
+        if ($writeFile) {
+            file_put_contents($xmlFile, $xmlData);
+        }
 
         $domDoc = null;
         try {
@@ -602,7 +950,19 @@ class OffloadResourcesCommand extends Command
             return $tmsDescription;
         }
 
-        return $description;
+        if ($description !== '') {
+            return $description;
+        }
+
+        $fallbackValues = [];
+        foreach ($this->descriptionFallbackFields as $field) {
+            $value = $this->cleanMetadataText($metadata[$field] ?? '');
+            if ($value !== '' && !in_array($value, $fallbackValues, true)) {
+                $fallbackValues[] = $value;
+            }
+        }
+
+        return implode($this->descriptionFallbackSeparator, $fallbackValues);
     }
 
     private function offloadResource($resourceId, $data, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection): bool
@@ -612,30 +972,49 @@ class OffloadResourcesCommand extends Command
         // Upload the image file and delete locally, but only if the file has been modified since the last offload (or the file has not been offloaded yet)
         if ($offloadFile && $localFilename != null) {
             if (!$this->dryRun) {
-                $this->ftpUtil->uploadFile($collection, $localFilename, $uniqueFilename);
+                $uploaded = $this->uploadOffloadFiles(
+                    $collection,
+                    $localFilename,
+                    $uniqueFilename,
+                    $xmlFile,
+                    $uniqueFilenameWithoutExtension . '.xml'
+                );
 
-                // Store this file checksum in the database to prevent this exact file from being offloaded again
-                $fileChecksum = new FileChecksum();
-                $fileChecksum->setFileChecksum($md5);
-                $fileChecksum->setResourceId($resourceId);
-                $this->entityManager->persist($fileChecksum);
-                $this->entityManager->flush();
+                if (!$uploaded) {
+                    $this->uploadError = true;
+                    $this->failResourceOffload($resourceId, $data, 'Could not upload the resource file and its XML metadata to the meemoo FTP server.');
+                    $result = false;
+                } else {
+                    // Only remember the checksum after both the resource and its XML metadata were uploaded successfully.
+                    $fileChecksum = new FileChecksum();
+                    $fileChecksum->setFileChecksum($md5);
+                    $fileChecksum->setResourceId($resourceId);
+                    $this->entityManager->persist($fileChecksum);
+                    $this->entityManager->flush();
 
-                // Update offload status in ResourceSpace
-                if ($data[$statusKey] == $this->offloadStatusField['values']['offload']
-                    || $data[$statusKey] == $this->offloadStatusField['values']['offloaded']
-                    || $data[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
-                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_pending']);
-                } else if ($data[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
-                    || $data[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']
-                    || $data[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
-                    $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_pending_but_keep_original']);
+                    // Update offload status in ResourceSpace. The file is already at meemoo at this
+                    // point, so a failing status update must be visible instead of silently ignored.
+                    $pendingStatus = null;
+                    if ($data[$statusKey] == $this->offloadStatusField['values']['offload']
+                        || $data[$statusKey] == $this->offloadStatusField['values']['offloaded']
+                        || $data[$statusKey] == $this->offloadStatusField['values']['offload_failed']) {
+                        $pendingStatus = $this->offloadStatusField['values']['offload_pending'];
+                    } else if ($data[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
+                        || $data[$statusKey] == $this->offloadStatusField['values']['offload_failed_but_keep_original']
+                        || $data[$statusKey] == $this->offloadStatusField['values']['offloaded_but_keep_original']) {
+                        $pendingStatus = $this->offloadStatusField['values']['offload_pending_but_keep_original'];
+                    }
+
+                    if ($pendingStatus !== null && !$this->resourceSpace->updateFieldVerified($resourceId, $statusKey, $pendingStatus)) {
+                        $this->statusUpdateError = true;
+                        echo 'ERROR at resource ' . $resourceId . ': file was uploaded to meemoo but the offload status could not be updated in ResourceSpace.' . PHP_EOL;
+                        $this->resourceSpace->updateError($resourceId, $this->errorField, 'File was uploaded to meemoo but the offload status could not be updated.', $data, false, true);
+                    } else {
+                        $this->resourceSpace->updateError($resourceId, $this->errorField, '', $data);
+                    }
+                    // Update offload timestamp (resource) in ResourceSpace
+                    $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
                 }
-                $this->resourceSpace->updateError($resourceId, $this->errorField, '', $data);
-                // Update offload timestamp (resource) in ResourceSpace
-                $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_timestamp_resource'], DateTimeUtil::formatTimestampWithTimezone());
-                // Upload the XML file and delete locally
-                $this->ftpUtil->uploadFile($collection, $xmlFile, $uniqueFilenameWithoutExtension . '.xml');
             }
         } else {
             if (array_key_exists($this->resourceSpaceMetadataFields['meemoo_asset_url'], $data)) {
@@ -656,10 +1035,9 @@ class OffloadResourcesCommand extends Command
                         }
                         $result = false;
                     } else {
-                        if(!$this->dryRun) {
-                            $this->resourceSpace->updateError($resourceId, $this->errorField, '', $data);
-                        }
-
+                        // NOTE: the error field is deliberately not cleared here. It is only cleared once
+                        // the metadata actually reached meemoo, so a failing update keeps the resource
+                        // flagged and the existing retry logic picks it up on the next run.
                         $fragmentId = $currentMeemooMetadata['fragment_id'];
                         $oldMetadata = $currentMeemooMetadata['data'];
 
@@ -671,6 +1049,8 @@ class OffloadResourcesCommand extends Command
                         $difference = $this->getDifference($oldMetadata, $newMetadata);
                         if (empty($difference)) {
                             echo 'No actual difference in metadata for resource ' . $resourceId . ', skipping.' . PHP_EOL;
+                            // Already in sync with meemoo, so any earlier error no longer applies
+                            $this->clearOffloadError($resourceId, $data);
                             $result = false;
                         } else {
                             $this->logDestructiveMetadataChanges($resourceId, $fragmentId, $collection, $oldMetadata, $difference);
@@ -700,6 +1080,13 @@ class OffloadResourcesCommand extends Command
 
                             if(!$this->dryRun) {
                                 $result = $this->restApi->updateMetadata($collection, $fragmentId, json_encode($query));
+                                if ($result) {
+                                    $this->clearOffloadError($resourceId, $data);
+                                } else {
+                                    $this->metadataUpdateError = true;
+                                    echo 'ERROR at resource ' . $resourceId . ': the metadata update to meemoo failed.' . PHP_EOL;
+                                    $this->resourceSpace->updateError($resourceId, $this->errorField, 'Metadata update to meemoo failed.', $data, false, true);
+                                }
                             }
                         }
                     }
@@ -716,6 +1103,15 @@ class OffloadResourcesCommand extends Command
             }
         }
         return $result;
+    }
+
+    private function uploadOffloadFiles(string $collection, string $localFilename, string $remoteFilename, string $xmlFile, string $remoteXmlFilename): bool
+    {
+        if (!$this->ftpUtil->uploadFile($collection, $localFilename, $remoteFilename)) {
+            return false;
+        }
+
+        return $this->ftpUtil->uploadFile($collection, $xmlFile, $remoteXmlFilename);
     }
 
     private function getCurrentMeemooMetadata($assetUrl, $collection): ?array

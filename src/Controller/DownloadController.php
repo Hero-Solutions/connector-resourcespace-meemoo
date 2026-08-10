@@ -77,7 +77,7 @@ final class DownloadController extends AbstractController
         }
 
         if ($downloadUrl !== null) {
-            return $this->redirect($downloadUrl);
+            return $this->downloadReadyResponse($downloadUrl);
         }
 
         return $this->requestNewExport($publisher, $id);
@@ -95,7 +95,7 @@ final class DownloadController extends AbstractController
 
         $this->em->flush();
 
-        return $this->redirect($job->DownloadUrl);
+        return $this->downloadReadyResponse($job->DownloadUrl);
     }
 
     private function requestNewExport(string $publisher, string $id): Response
@@ -130,7 +130,7 @@ final class DownloadController extends AbstractController
             $this->em->persist($export);
             $this->em->flush();
 
-            return $this->redirect($job->DownloadUrl);
+            return $this->downloadReadyResponse($job->DownloadUrl);
         }
 
         $this->em->persist($export);
@@ -146,7 +146,25 @@ final class DownloadController extends AbstractController
         return new Response(
             sprintf(
                 '<html><head><meta http-equiv="refresh" content="10" /></head><body>%s</body></html>',
-                $message
+                htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            )
+        );
+    }
+
+    private function downloadReadyResponse(string $downloadUrl): Response
+    {
+        $safeUrl = htmlspecialchars($downloadUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $downloadUrlJson = json_encode($downloadUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+        return new Response(
+            sprintf(
+                '<html><head><title>Image download ready</title></head><body>'
+                . 'Image download ready. Your download should start automatically. '
+                . '<a href="%s">Click here if it does not start.</a>'
+                . '<script>window.location.href = %s;</script>'
+                . '</body></html>',
+                $safeUrl,
+                $downloadUrlJson
             )
         );
     }
