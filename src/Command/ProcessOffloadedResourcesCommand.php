@@ -23,6 +23,8 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 
 class ProcessOffloadedResourcesCommand extends Command
 {
+    private const OAI_CLOCK_SKEW_SECONDS = 7200;
+
     private ParameterBagInterface $params;
     private EntityManagerInterface $entityManager;
     private bool $dryRun;
@@ -40,6 +42,9 @@ class ProcessOffloadedResourcesCommand extends Command
 
     private RestApi $restApi;
     private array $resourcesProcessed;
+    private array $resourcesSeen;
+    private array $resourceArchiveStatuses;
+    private int $pendingProcessingGraceSeconds;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $dryRun = false)
     {
@@ -127,6 +132,16 @@ class ProcessOffloadedResourcesCommand extends Command
         $collections = $this->params->get('collections');
         $collectionKey = $collections['key'];
         $this->resourcesProcessed = array();
+        $this->resourcesSeen = array();
+        $this->resourceArchiveStatuses = array();
+        $pendingProcessingGraceHours = $this->params->has('pending_processing_grace_hours')
+            ? $this->params->get('pending_processing_grace_hours')
+            : 48;
+        if (!is_numeric($pendingProcessingGraceHours) || (int) $pendingProcessingGraceHours < 1) {
+            echo 'ERROR: pending_processing_grace_hours must be a positive number.' . PHP_EOL;
+            return Command::INVALID;
+        }
+        $this->pendingProcessingGraceSeconds = (int) $pendingProcessingGraceHours * 3600;
 
         if ($this->resourceIdFilter !== null) {
             $resourceReadFailed = false;
@@ -155,8 +170,7 @@ class ProcessOffloadedResourcesCommand extends Command
             $lastOffloadTimestampFile = $this->params->get('last_offload_timestamp_file');
             if (file_exists($lastOffloadTimestampFile)) {
                 $file = fopen($lastOffloadTimestampFile, "r") or die("ERROR: Unable to open file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
-                // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
-                $lastOffloadTimestamp = intval(fgets($file)) - 7200;
+                $lastOffloadTimestamp = intval(fgets($file));
                 fclose($file);
             } else {
                 die("ERROR: Unable to locate file containing last offload timestamp ('" . $lastOffloadTimestampFile . "').");
@@ -165,21 +179,24 @@ class ProcessOffloadedResourcesCommand extends Command
             // Also grab the last processed timestamp in case the OAI-PMH API was having issues
             if (file_exists($lastProcessedTimestampFile)) {
                 $file = fopen($lastProcessedTimestampFile, "r") or die("ERROR: Unable to open file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
-                // Ask for resources from 2 hours earlier to compensate for time differences (probably a wrong clock offset)
-                $lastProcessedTimestamp = intval(fgets($file)) - 7200;
+                $lastProcessedTimestamp = intval(fgets($file));
                 fclose($file);
             } else {
                 die("ERROR: Unable to locate file containing last processed timestamp ('" . $lastProcessedTimestampFile . "').");
             }
 
-            // Use the oldest timestamp
-            if($lastProcessedTimestamp < $lastOffloadTimestamp) {
-                $lastOffloadTimestamp = $lastProcessedTimestamp;
-            }
+            // Keep the cursor safety behavior after incomplete runs, but always revisit at least
+            // the complete pending grace period. The extra two hours compensate for possible UTC
+            // differences in meemoo's OAI-PMH datestamps.
+            $cursorTimestamp = min($lastOffloadTimestamp, $lastProcessedTimestamp) - self::OAI_CLOCK_SKEW_SECONDS;
+            $rollingLookbackTimestamp = time()
+                - $this->pendingProcessingGraceSeconds
+                - self::OAI_CLOCK_SKEW_SECONDS;
+            $oaiFromTimestamp = min($cursorTimestamp, $rollingLookbackTimestamp);
 
-            $lastOffloadDateTime = new DateTime(DateTimeUtil::formatTimestampWithTimezone($lastOffloadTimestamp));
-            $this->verboseLog('Processing OAI-PMH records since ' . $lastOffloadDateTime->format(DATE_ATOM) . '.');
-            $this->processOaiPmhApi($collections['values'], $lastOffloadDateTime);
+            $oaiFromDateTime = new DateTime(DateTimeUtil::formatTimestampWithTimezone($oaiFromTimestamp));
+            $this->verboseLog('Processing OAI-PMH records since ' . $oaiFromDateTime->format(DATE_ATOM) . '.');
+            $this->processOaiPmhApi($collections['values'], $oaiFromDateTime);
             if ($this->coverageError) {
                 echo 'WARNING: Pending ResourceSpace resources were not marked as missing because the meemoo check was incomplete.' . PHP_EOL;
             } else {
@@ -307,10 +324,18 @@ class ProcessOffloadedResourcesCommand extends Command
                 $archiveStatus = null;
                 $archiveStatuses = $record->xpath($archiveStatusXpath);
                 foreach($archiveStatuses as $status) {
-                    $archiveStatus = $status;
+                    $archiveStatus = trim((string) $status);
                 }
+
+                if (!in_array($resourceId, $this->resourcesSeen, true)) {
+                    $this->resourcesSeen[] = $resourceId;
+                }
+                $this->resourceArchiveStatuses[$resourceId] = $archiveStatus;
+
                 if($archiveStatus === null || !in_array($archiveStatus, $completedStatuses)) {
-                    echo 'ERROR: resource ' . $resourceId . ' has archive status ' . $archiveStatus . PHP_EOL;
+                    echo 'Resource ' . $resourceId . ' is still being processed by meemoo (archive status: '
+                        . ($archiveStatus === null || $archiveStatus === '' ? 'unknown' : $archiveStatus)
+                        . ').' . PHP_EOL;
                 } else {
                     // This resource is present in a completed meemoo record even if one of the
                     // local finalization steps below fails. Do not later mislabel it as missing
@@ -647,20 +672,110 @@ class ProcessOffloadedResourcesCommand extends Command
                         continue;
                     }
                     if($resourceMetadata != null) {
-                        echo 'Resource ' . $resourceId . ' has not been processed by meemoo!' . PHP_EOL;
-                        if(!$this->dryRun) {
-                            $this->resourceSpace->updateField($resourceId, $this->resourceSpaceMetadataFields['offload_error'], 'Resource has not been processed by meemoo.', false, true);
-                            if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending']) {
-                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed']);
-                            } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_pending_but_keep_original']) {
-                                $this->resourceSpace->updateField($resourceId, $statusKey, $this->offloadStatusField['values']['offload_failed_but_keep_original']);
-                            }
+                        $pendingAgeSeconds = $this->getPendingAgeSeconds($resourceMetadata);
+                        if ($pendingAgeSeconds === null) {
+                            $this->recordPendingAgeError($resourceId, $resourceMetadata);
+                            continue;
                         }
+
+                        $resourceIdString = (string) $resourceId;
+                        $archiveStatus = $this->resourceArchiveStatuses[$resourceIdString] ?? null;
+                        if ($pendingAgeSeconds < $this->pendingProcessingGraceSeconds) {
+                            if (in_array($resourceIdString, $this->resourcesSeen, true)) {
+                                echo 'Resource ' . $resourceId . ' remains pending while meemoo processes it (archive status: '
+                                    . ($archiveStatus === null || $archiveStatus === '' ? 'unknown' : $archiveStatus)
+                                    . ').' . PHP_EOL;
+                            } else {
+                                echo 'Resource ' . $resourceId
+                                    . ' remains pending while its meemoo record becomes available.' . PHP_EOL;
+                            }
+                            continue;
+                        }
+
+                        $graceHours = (int) ($this->pendingProcessingGraceSeconds / 3600);
+                        if (in_array($resourceIdString, $this->resourcesSeen, true)) {
+                            $message = 'Meemoo processing did not complete within ' . $graceHours
+                                . ' hours (last archive status: '
+                                . ($archiveStatus === null || $archiveStatus === '' ? 'unknown' : $archiveStatus)
+                                . ').';
+                        } else {
+                            $message = 'No meemoo record was found within ' . $graceHours . ' hours after offload.';
+                        }
+                        $this->failPendingResource($resourceId, $resourceMetadata, $statusKey, $message);
                     }
                 }
             }
 
             $this->verboseLog('Finished missing-resource check for ' . $collection . ' (' . $checkedResourceCount . ' resources).');
+        }
+    }
+
+    private function getPendingAgeSeconds(array $resourceMetadata): ?int
+    {
+        $offloadTimestampKey = $this->resourceSpaceMetadataFields['offload_timestamp_resource'];
+        $offloadTimestamp = trim((string) ($resourceMetadata[$offloadTimestampKey] ?? ''));
+        if ($offloadTimestamp === '') {
+            return null;
+        }
+
+        try {
+            $offloadDateTime = new DateTime($offloadTimestamp, new DateTimeZone('UTC'));
+        } catch (Exception) {
+            return null;
+        }
+
+        return max(0, time() - $offloadDateTime->getTimestamp());
+    }
+
+    private function recordPendingAgeError($resourceId, array $resourceMetadata): void
+    {
+        $message = 'Cannot determine how long this resource has been pending because its offload time is missing or invalid.';
+        echo 'ERROR at resource ' . $resourceId . ': ' . $message . PHP_EOL;
+        $this->processError = true;
+
+        if ($this->dryRun) {
+            return;
+        }
+
+        if (!$this->resourceSpace->updateErrorVerified(
+            $resourceId,
+            $this->resourceSpaceMetadataFields['offload_error'],
+            $message,
+            $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? '',
+            true
+        )) {
+            echo 'ERROR at resource ' . $resourceId
+                . ': the missing offload-time error could not be written to ResourceSpace.' . PHP_EOL;
+        }
+    }
+
+    private function failPendingResource($resourceId, array $resourceMetadata, string $statusKey, string $message): void
+    {
+        echo 'ERROR at resource ' . $resourceId . ': ' . $message . PHP_EOL;
+        $this->processError = true;
+
+        if ($this->dryRun) {
+            return;
+        }
+
+        if (!$this->resourceSpace->updateErrorVerified(
+            $resourceId,
+            $this->resourceSpaceMetadataFields['offload_error'],
+            $message,
+            $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? '',
+            true
+        )) {
+            echo 'ERROR at resource ' . $resourceId
+                . ': the pending timeout error could not be written to ResourceSpace.' . PHP_EOL;
+            return;
+        }
+
+        $failedStatus = $resourceMetadata[$statusKey] === $this->offloadStatusField['values']['offload_pending_but_keep_original']
+            ? $this->offloadStatusField['values']['offload_failed_but_keep_original']
+            : $this->offloadStatusField['values']['offload_failed'];
+        if (!$this->resourceSpace->updateFieldVerified($resourceId, $statusKey, $failedStatus)) {
+            echo 'ERROR at resource ' . $resourceId
+                . ': the pending resource could not be moved to status "' . $failedStatus . '".' . PHP_EOL;
         }
     }
 }
