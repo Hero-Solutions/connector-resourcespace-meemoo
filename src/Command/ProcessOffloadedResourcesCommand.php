@@ -24,6 +24,7 @@ use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 class ProcessOffloadedResourcesCommand extends Command
 {
     private const OAI_CLOCK_SKEW_SECONDS = 7200;
+    private const DEFAULT_ARCHIVE_MD5_XPATH = 'mets:fileSec/mets:fileGrp/mets:file[@USE="PRESERVATION" and @CHECKSUMTYPE="MD5"]/@CHECKSUM';
 
     private ParameterBagInterface $params;
     private EntityManagerInterface $entityManager;
@@ -227,6 +228,13 @@ class ProcessOffloadedResourcesCommand extends Command
         $overrideCertificateAuthorityFile = $this->params->get('override_certificate_authority');
         $sslCertificateAuthorityFile = $this->params->get('ssl_certificate_authority_file');
         $oaiPmhApi = $this->params->get('oai_pmh_api');
+        $archiveMd5Xpath = $oaiPmhApi['archive_md5_xpath'] ?? self::DEFAULT_ARCHIVE_MD5_XPATH;
+        if (!is_string($archiveMd5Xpath) || trim($archiveMd5Xpath) === '') {
+            echo 'ERROR: oai_pmh_api.archive_md5_xpath must be a non-empty XPath.' . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            return;
+        }
 
         foreach($collections as $collection) {
             $recordCount = 0;
@@ -248,7 +256,7 @@ class ProcessOffloadedResourcesCommand extends Command
 
                     $this->processRecord($collection, $record->header->identifier, $record->metadata->children($oaiPmhApi['namespace'], true),
                         $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath'], $oaiPmhApi['archive_status_xpath'],
-                        $oaiPmhApi['resource_data_xpath'] . '/md5',
+                        $archiveMd5Xpath,
                         $oaiPmhApi['completed_status']);
 
                     // A targeted repair needs only the first completed record containing the
