@@ -9,6 +9,7 @@ use App\Util\FtpUtil;
 use App\Util\OaiPmhApiUtil;
 use App\Util\RestApi;
 use App\Util\XMLUtil;
+use App\Twig\MetadataTemplateExtension;
 use Doctrine\ORM\EntityManagerInterface;
 use DOMDocument;
 use DOMXPath;
@@ -954,6 +955,7 @@ class OffloadResourcesCommand extends Command
         if ($this->metadataTemplate == null) {
             $loader = new FilesystemLoader('./');
             $twig = new Environment($loader, [ 'strict_variables' => true ]);
+            $twig->addExtension(new MetadataTemplateExtension());
             try {
                 $this->metadataTemplate = $twig->load($this->templateFile);
             } catch (LoaderError|RuntimeError|SyntaxError $e) {

@@ -52,6 +52,7 @@
         "symfony/polyfill-php82": "*"
     },
     "scripts": {
+        "test:metadata-credit": "php tests/metadata_credit_deduplication.php",
         "auto-scripts": {
             "cache:clear": "symfony-cmd",
             "assets:install %PUBLIC_DIR%": "symfony-cmd"

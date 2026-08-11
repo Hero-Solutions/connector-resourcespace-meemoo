@@ -185,8 +185,9 @@
 {% endif %}
 {% set credit = resource.credit|default('')|trim %}
 {% set copyrightnotice = resource.copyrightnotice|default('')|trim %}
-{% set normalized_credit = credit|lower %}
-{% set normalized_copyrightnotice = copyrightnotice|lower %}
+{# Decode entities only for comparison. Keep the original ResourceSpace values in the output. #}
+{% set normalized_credit = credit|normalize_metadata_text|lower %}
+{% set normalized_copyrightnotice = copyrightnotice|normalize_metadata_text|lower %}
 {% if credit is not empty or copyrightnotice is not empty %}
 {% set rights_credit = [] %}
 {% if credit is not empty %}
