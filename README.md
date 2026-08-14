@@ -61,6 +61,14 @@ To do this, copy 'connector.yml.sample' to 'connector.yml' inside the 'config' d
 Once you have done this, fill in the empty fields next to 'url', 'username' and 'key' under 'resourcespace_api', where you enter the URL of your ResourceSpace installation along with your ResourceSpace username and API key.
 Also copy '.env.sample' to '.env' and fill in the DATABASE_URL parameter with your username, password, host and database name.
 
+Configure the numeric ResourceSpace field ID of the offload error field. The connector uses this to find retry resources without fetching the complete metadata of every already-offloaded resource:
+
+```yaml
+resourcespace_metadata_fields:
+    offload_error: 'offloaderror'
+    offload_error_ref: 148
+```
+
 For a new ingest, the main description falls back to the ResourceSpace inventory number when the regular description is empty. Metadata-only updates of existing meemoo assets never use this fallback and preserve the archived description when ResourceSpace has no regular description. The ingest fallback can be changed in `connector.yml`; multiple fields are combined in the configured order:
 
 ```yaml

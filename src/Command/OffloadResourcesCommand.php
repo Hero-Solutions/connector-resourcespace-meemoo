@@ -28,6 +28,8 @@ use Twig\TemplateWrapper;
 
 class OffloadResourcesCommand extends Command
 {
+    private const RESOURCE_SELECTION_SAFETY_MARGIN_SECONDS = 2 * 60 * 60;
+
     private ParameterBagInterface $params;
     private EntityManagerInterface $entityManager;
     private bool $dryRun;
@@ -55,6 +57,7 @@ class OffloadResourcesCommand extends Command
     private array $offloadStatusField;
     private array $resourceSpaceMetadataFields;
     private string $errorField;
+    private int $offloadErrorFieldRef;
     private array $conversionTable;
     private array $digitizationPartners;
     private array $descriptionFallbackFields = ['inventorynumber'];
@@ -249,6 +252,15 @@ class OffloadResourcesCommand extends Command
         $this->offloadStatusField = $this->params->get('offload_status_field');
         $this->resourceSpaceMetadataFields = $this->params->get('resourcespace_metadata_fields');
         $this->errorField = $this->resourceSpaceMetadataFields['offload_error'];
+        $configuredErrorFieldRef = $this->resourceSpaceMetadataFields['offload_error_ref'] ?? null;
+        if ((!is_int($configuredErrorFieldRef) && !is_string($configuredErrorFieldRef))
+            || !ctype_digit((string) $configuredErrorFieldRef)
+            || (int) $configuredErrorFieldRef < 1) {
+            throw new \InvalidArgumentException(
+                'resourcespace_metadata_fields.offload_error_ref must be a positive ResourceSpace field ID.'
+            );
+        }
+        $this->offloadErrorFieldRef = (int) $configuredErrorFieldRef;
         $offloadValues = $this->offloadStatusField['values'];
         $this->conversionTable = $this->params->get('conversion_table');
         // Lowercased for case-insensitive matching in the template (e.g. 'D/arch' vs 'D/Arch')
@@ -314,6 +326,22 @@ class OffloadResourcesCommand extends Command
         // Keep track of resource ID's that are already processed to prevent duplicates (duplicates may emerge through different searches)
         $alreadyProcessed = array();
         $timestamp = time();
+        $useFastSelection = $this->shouldUseFastResourceSelection();
+        $resourcesWithOffloadErrors = array();
+
+        if ($useFastSelection) {
+            $resourcesWithOffloadErrors = $this->getResourcesWithOffloadErrors();
+            if ($resourcesWithOffloadErrors === null) {
+                echo 'ERROR: Could not retrieve ResourceSpace resources with data in offload error field '
+                    . $this->offloadErrorFieldRef . '; the offload was stopped.' . PHP_EOL;
+                $this->searchError = true;
+                return;
+            }
+            if ($this->verbose) {
+                echo 'INFO: Found ' . count($resourcesWithOffloadErrors)
+                    . ' resources with a non-empty offload error.' . PHP_EOL;
+            }
+        }
 
         // Loop through all collections
         foreach ($this->collections['values'] as $collection) {
@@ -344,10 +372,14 @@ class OffloadResourcesCommand extends Command
                     if ($this->resourceIdFilter !== null) {
                         $this->resourceIdFilterMatched = true;
                     }
-                    if(in_array($resourceId, $alreadyProcessed)) {
+                    if (isset($alreadyProcessed[$resourceId])) {
                         continue;
                     }
-                    $alreadyProcessed[] = $resourceId;
+                    if ($useFastSelection
+                        && !$this->resourceNeedsFullMetadata($filter, $resourceInfo, $resourcesWithOffloadErrors)) {
+                        continue;
+                    }
+                    $alreadyProcessed[$resourceId] = true;
 
                     // Get this resource's metadata, but only if it has an appropriate offloadStatus
                     $metadataReadFailed = false;
@@ -568,6 +600,73 @@ class OffloadResourcesCommand extends Command
             && !$this->searchError
             && !$this->cursorSafetyError
             && $this->resourceIdFilter === null;
+    }
+
+    private function shouldUseFastResourceSelection(): bool
+    {
+        return !$this->dryRun
+            && !$this->forceUpdateMetadata
+            && $this->resourceIdFilter === null
+            && $this->lastMetadataTemplateChange <= $this->lastOffloadTimestamp;
+    }
+
+    private function getResourcesWithOffloadErrors(): ?array
+    {
+        $rows = $this->resourceSpace->getAllResources(
+            urlencode('!hasdata' . $this->offloadErrorFieldRef)
+        );
+        if (!is_array($rows)) {
+            return null;
+        }
+
+        $resourceIds = array();
+        foreach ($rows as $row) {
+            $resourceId = is_array($row) ? ($row['ref'] ?? null) : null;
+            if ((!is_int($resourceId) && !is_string($resourceId))
+                || !ctype_digit((string) $resourceId)
+                || (int) $resourceId < 1) {
+                return null;
+            }
+            $resourceIds[(int) $resourceId] = true;
+        }
+
+        return $resourceIds;
+    }
+
+    private function resourceNeedsFullMetadata(string $status, array $resourceInfo, array $resourcesWithOffloadErrors): bool
+    {
+        $skipEligibleStatuses = [
+            $this->offloadStatusField['values']['offloaded'],
+            $this->offloadStatusField['values']['offloaded_but_keep_original'],
+        ];
+        if (!in_array($status, $skipEligibleStatuses, true)) {
+            return true;
+        }
+
+        $resourceId = $resourceInfo['ref'] ?? null;
+        if ((!is_int($resourceId) && !is_string($resourceId))
+            || !ctype_digit((string) $resourceId)
+            || (int) $resourceId < 1) {
+            return true;
+        }
+        if (isset($resourcesWithOffloadErrors[(int) $resourceId])) {
+            return true;
+        }
+
+        $selectionTimestamp = $this->lastOffloadTimestamp - self::RESOURCE_SELECTION_SAFETY_MARGIN_SECONDS;
+        return $this->searchTimestampRequiresFullMetadata($resourceInfo, 'modified', $selectionTimestamp)
+            || $this->searchTimestampRequiresFullMetadata($resourceInfo, 'file_modified', $selectionTimestamp);
+    }
+
+    private function searchTimestampRequiresFullMetadata(array $resourceInfo, string $key, int $selectionTimestamp): bool
+    {
+        $value = trim((string) ($resourceInfo[$key] ?? ''));
+        if ($value === '') {
+            return true;
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp === false || $timestamp > $selectionTimestamp;
     }
 
     private function processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension, $offloadFile, $fileModifiedTimestampAsString): void
