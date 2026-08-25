@@ -109,11 +109,15 @@ To check if the last offload was successful and delete the appropriate original 
 php bin/console app:process-offloaded-resources
 ```
 
-The processor first harvests and verifies the complete OAI-PMH result set without
-changing ResourceSpace. It starts processing only after pagination is demonstrably
-complete. An OAI-PMH record is linked to ResourceSpace only when both its numeric
-ResourceSpace ID and preservation MD5 match a checksum stored by this connector for
-that resource during upload.
+The processor divides the requested OAI-PMH period into daily UTC windows. It first
+harvests and verifies every window for a collection without changing ResourceSpace,
+and starts processing only after all pagination in all windows is demonstrably
+complete. If MediaHaven returns an empty HTTP 404 or an invalid end-of-pagination error,
+the affected window is divided into two gapless one-second-granularity windows and
+retried recursively. This avoids unreliable deep pagination for a large catch-up
+period without ever treating an incomplete harvest as complete. An OAI-PMH record is
+linked to ResourceSpace only when both its numeric ResourceSpace ID and preservation
+MD5 match a checksum stored by this connector for that resource during upload.
 
 For a manual run with live, timed progress information, use:
 

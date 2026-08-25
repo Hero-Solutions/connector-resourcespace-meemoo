@@ -7,10 +7,18 @@ use Phpoaipmh\Client;
 use Phpoaipmh\Endpoint;
 use Phpoaipmh\Exception\HttpException;
 use Phpoaipmh\Exception\OaipmhException;
+use Phpoaipmh\Granularity;
 
 class OaiPmhApiUtil
 {
-    public static function connect($restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile): ?Endpoint
+    public static function connect(
+        $restApi,
+        $oaiPmhApi,
+        $collection,
+        $overrideCertificateAuthorityFile,
+        $sslCertificateAuthorityFile,
+        &$granularityOutput = null
+    ): ?Endpoint
     {
         try {
             if (!$restApi->ensureValidAccessToken($collection)) {
@@ -35,8 +43,21 @@ class OaiPmhApiUtil
             );
 
             $oaiPmhClient = new Client($oaiPmhApi['url'], $curlAdapter);
+            $autoGranularityEndpoint = new Endpoint($oaiPmhClient);
+            $identifyResponse = $autoGranularityEndpoint->identify();
+            $granularity = isset($identifyResponse->Identify->granularity)
+                ? (string) $identifyResponse->Identify->granularity
+                : Granularity::DATE;
+            if (!in_array($granularity, [Granularity::DATE, Granularity::DATE_AND_TIME], true)) {
+                throw new \UnexpectedValueException(
+                    'Unsupported OAI-PMH granularity returned by Identify: ' . $granularity
+                );
+            }
+            $granularityOutput = $granularity;
 
-            return new Endpoint($oaiPmhClient);
+            // Supplying the discovered granularity avoids a hidden Identify request for every
+            // subsequent daily ListRecords window.
+            return new Endpoint($oaiPmhClient, $granularity);
         } catch (OaipmhException $e) {
             if ($e->getOaiErrorCode() === 'noRecordsMatch') {
                 echo 'No records to process, exiting.' . PHP_EOL;

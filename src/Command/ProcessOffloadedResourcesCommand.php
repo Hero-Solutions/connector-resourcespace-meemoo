@@ -15,6 +15,7 @@ use Phpoaipmh\Client;
 use Phpoaipmh\Endpoint;
 use Phpoaipmh\Exception\HttpException;
 use Phpoaipmh\Exception\OaipmhException;
+use Phpoaipmh\Granularity;
 use Phpoaipmh\HttpAdapter\CurlAdapter;
 use Phpoaipmh\RecordIteratorInterface;
 use Symfony\Component\Console\Command\Command;
@@ -247,98 +248,65 @@ class ProcessOffloadedResourcesCommand extends Command
             return;
         }
 
+        $harvestWindows = $this->createDailyHarvestWindows($from, $until);
+        if ($harvestWindows === []) {
+            echo 'ERROR: The OAI-PMH harvest start is later than its end.' . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            return;
+        }
+
         foreach($collections as $collection) {
             $recordCount = 0;
-            $records = null;
             $harvestedRecords = [];
-            $harvestComplete = false;
+            $collectionHarvestComplete = true;
 
             try {
                 $this->verboseLog('Starting OAI-PMH collection ' . $collection . '.');
-                $oaiPmhEndpoint = OaiPmhApiUtil::connect($this->restApi, $oaiPmhApi, $collection, $overrideCertificateAuthorityFile, $sslCertificateAuthorityFile);
+                $oaiGranularity = null;
+                $oaiPmhEndpoint = OaiPmhApiUtil::connect(
+                    $this->restApi,
+                    $oaiPmhApi,
+                    $collection,
+                    $overrideCertificateAuthorityFile,
+                    $sslCertificateAuthorityFile,
+                    $oaiGranularity
+                );
                 if ($oaiPmhEndpoint === null) {
                     throw new Exception('Could not connect to the OAI-PMH endpoint.');
-                }
-                $this->verboseLog('Requesting OAI-PMH records for ' . $collection . '.');
-                $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], $from, $until);
-
-                foreach($records as $record) {
-                    $recordCount++;
-                    if($recordCount === 1 || $recordCount % 100 === 0) {
-                        $this->verboseLog('Harvesting OAI-PMH record ' . $recordCount . ' for ' . $collection . '.');
-                    }
-
-                    if (!isset($record->metadata)) {
-                        // Deleted OAI-PMH records legitimately have a header without metadata and
-                        // cannot be linked to ResourceSpace.
-                        if (isset($record->header['status']) && (string) $record->header['status'] === 'deleted') {
-                            continue;
-                        }
-                        throw new \UnexpectedValueException(
-                            'OAI-PMH record ' . $recordCount . ' for ' . $collection . ' has no metadata.'
-                        );
-                    }
-                    if (!isset($record->header->identifier) || trim((string) $record->header->identifier) === '') {
-                        throw new \UnexpectedValueException(
-                            'OAI-PMH record ' . $recordCount . ' for ' . $collection . ' has no identifier.'
-                        );
-                    }
-
-                    $metadata = $record->metadata->children($oaiPmhApi['namespace'], true);
-                    foreach ($this->extractHarvestedRecords(
-                        $collection,
-                        (string) $record->header->identifier,
-                        $metadata,
-                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'],
-                        $oaiPmhApi['media_id_xpath'],
-                        $oaiPmhApi['archive_status_xpath'],
-                        $archiveMd5Xpath
-                    ) as $harvestedRecord) {
-                        $harvestedRecords[] = $harvestedRecord;
-                    }
-                }
-
-                $harvestComplete = $this->validateCompletedHarvest($collection, $records, $recordCount);
-            }
-            catch(OaipmhException $e) {
-                if($e->getOaiErrorCode() == 'noRecordsMatch'
-                    && $this->canConfirmHarvestCompleteAfterNoRecords($records, $recordCount)) {
-                    $harvestComplete = true;
-                    if ($recordCount === 0) {
-                        echo 'No records to process for ' . $collection . '.' . PHP_EOL;
-                    } else {
-                        echo 'WARNING: OAI-PMH returned noRecordsMatch after all ' . $recordCount
-                            . ' advertised records for ' . $collection . ' had already been harvested.' . PHP_EOL;
-                    }
-                } else {
-                    echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
-                    $this->processError = true;
-                    $this->coverageError = true;
-                }
-            }
-            catch(HttpException $e) {
-                if($this->isNoRecordsHttpException($e)
-                    && $this->canConfirmHarvestCompleteAfterNoRecords($records, $recordCount)) {
-                    $harvestComplete = true;
-                    if ($recordCount === 0) {
-                        echo 'No records to process for ' . $collection . '.' . PHP_EOL;
-                    } else {
-                        echo 'WARNING: OAI-PMH returned an empty 404 after all ' . $recordCount
-                            . ' advertised records for ' . $collection . ' had already been harvested.' . PHP_EOL;
-                    }
-                } else {
-                    echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
-                    $this->processError = true;
-                    $this->coverageError = true;
                 }
             }
             catch(\Throwable $e) {
                 echo 'OAI-PMH error (3) at collection ' . $collection . ': ' . $e . PHP_EOL;
                 $this->processError = true;
                 $this->coverageError = true;
+                $collectionHarvestComplete = false;
             }
 
-            if (!$harvestComplete) {
+            if ($collectionHarvestComplete) {
+                foreach ($harvestWindows as [$windowFrom, $windowUntil]) {
+                    $windowResult = $this->harvestOaiPmhWindow(
+                        $oaiPmhEndpoint,
+                        $collection,
+                        $windowFrom,
+                        $windowUntil,
+                        $oaiPmhApi,
+                        $archiveMd5Xpath,
+                        $oaiGranularity
+                    );
+                    if ($windowResult === null) {
+                        $collectionHarvestComplete = false;
+                        break;
+                    }
+
+                    $recordCount += $windowResult['record_count'];
+                    foreach ($windowResult['records'] as $harvestedRecord) {
+                        $harvestedRecords[] = $harvestedRecord;
+                    }
+                }
+            }
+
+            if (!$collectionHarvestComplete) {
                 if ($recordCount > 0) {
                     echo 'ERROR: Discarding ' . $recordCount . ' partially harvested OAI-PMH records for '
                         . $collection . '; no ResourceSpace resources were changed from this incomplete harvest.' . PHP_EOL;
@@ -346,7 +314,8 @@ class ProcessOffloadedResourcesCommand extends Command
                 continue;
             }
 
-            $this->verboseLog('Finished OAI-PMH harvest for ' . $collection . ' (' . $recordCount . ' records).');
+            $this->verboseLog('Finished OAI-PMH harvest for ' . $collection . ' (' . $recordCount
+                . ' records across ' . count($harvestWindows) . ' daily windows).');
             if (!$this->loadKnownOffloadChecksums()) {
                 return;
             }
@@ -361,6 +330,222 @@ class ProcessOffloadedResourcesCommand extends Command
                 }
             }
         }
+    }
+
+    private function createDailyHarvestWindows(DateTime $from, ?DateTime $until): array
+    {
+        $utc = new DateTimeZone('UTC');
+        $windowStart = (clone $from)->setTimezone($utc);
+        $harvestUntil = $until === null
+            ? new DateTime('now', $utc)
+            : (clone $until)->setTimezone($utc);
+        $windows = [];
+
+        while ($windowStart <= $harvestUntil) {
+            $windowEnd = (clone $windowStart)->setTime(23, 59, 59);
+            if ($windowEnd > $harvestUntil) {
+                $windowEnd = clone $harvestUntil;
+            }
+
+            $windows[] = [clone $windowStart, $windowEnd];
+            $windowStart = (clone $windowEnd)->modify('+1 second');
+        }
+
+        return $windows;
+    }
+
+    private function harvestOaiPmhWindow(
+        Endpoint $oaiPmhEndpoint,
+        string $collection,
+        DateTime $from,
+        DateTime $until,
+        array $oaiPmhApi,
+        string $archiveMd5Xpath,
+        string $oaiGranularity
+    ): ?array {
+        $recordCount = 0;
+        $records = null;
+        $harvestedRecords = [];
+        $harvestComplete = false;
+        $windowLabel = $from->format('Y-m-d\TH:i:s\Z') . ' until ' . $until->format('Y-m-d\TH:i:s\Z');
+
+        try {
+            $this->verboseLog('Requesting OAI-PMH records for ' . $collection . ' from ' . $windowLabel . '.');
+            $records = $oaiPmhEndpoint->listRecords($oaiPmhApi['metadata_prefix'], $from, $until);
+
+            foreach($records as $record) {
+                $recordCount++;
+                if($recordCount === 1 || $recordCount % 100 === 0) {
+                    $this->verboseLog('Harvesting OAI-PMH record ' . $recordCount . ' for ' . $collection
+                        . ' in window ' . $windowLabel . '.');
+                }
+
+                if (!isset($record->metadata)) {
+                    // Deleted OAI-PMH records legitimately have a header without metadata and
+                    // cannot be linked to ResourceSpace.
+                    if (isset($record->header['status']) && (string) $record->header['status'] === 'deleted') {
+                        continue;
+                    }
+                    throw new \UnexpectedValueException(
+                        'OAI-PMH record ' . $recordCount . ' for ' . $collection . ' has no metadata.'
+                    );
+                }
+                if (!isset($record->header->identifier) || trim((string) $record->header->identifier) === '') {
+                    throw new \UnexpectedValueException(
+                        'OAI-PMH record ' . $recordCount . ' for ' . $collection . ' has no identifier.'
+                    );
+                }
+
+                $metadata = $record->metadata->children($oaiPmhApi['namespace'], true);
+                foreach ($this->extractHarvestedRecords(
+                    $collection,
+                    (string) $record->header->identifier,
+                    $metadata,
+                    $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'],
+                    $oaiPmhApi['media_id_xpath'],
+                    $oaiPmhApi['archive_status_xpath'],
+                    $archiveMd5Xpath
+                ) as $harvestedRecord) {
+                    $harvestedRecords[] = $harvestedRecord;
+                }
+            }
+
+            $harvestComplete = $this->validateCompletedHarvest($collection, $records, $recordCount);
+        }
+        catch(OaipmhException $e) {
+            if($e->getOaiErrorCode() == 'noRecordsMatch' && $recordCount === 0) {
+                $harvestComplete = true;
+            } elseif ($recordCount > 0 && in_array($e->getOaiErrorCode(), ['noRecordsMatch', 'badResumptionToken'], true)) {
+                unset($harvestedRecords);
+                return $this->retryHarvestAsSmallerWindows(
+                    $oaiPmhEndpoint,
+                    $collection,
+                    $from,
+                    $until,
+                    $oaiPmhApi,
+                    $archiveMd5Xpath,
+                    $oaiGranularity,
+                    $recordCount,
+                    $records
+                );
+            } else {
+                echo 'OAI-PMH error (1) at collection ' . $collection . ' for window '
+                    . $windowLabel . ': ' . $e . PHP_EOL;
+                $this->processError = true;
+                $this->coverageError = true;
+            }
+        }
+        catch(HttpException $e) {
+            if($this->isNoRecordsHttpException($e)) {
+                unset($harvestedRecords);
+                return $this->retryHarvestAsSmallerWindows(
+                    $oaiPmhEndpoint,
+                    $collection,
+                    $from,
+                    $until,
+                    $oaiPmhApi,
+                    $archiveMd5Xpath,
+                    $oaiGranularity,
+                    $recordCount,
+                    $records
+                );
+            } else {
+                echo 'OAI-PMH error (2) at collection ' . $collection . ' for window '
+                    . $windowLabel . ': ' . $e . PHP_EOL;
+                $this->processError = true;
+                $this->coverageError = true;
+            }
+        }
+        catch(\Throwable $e) {
+            echo 'OAI-PMH error (3) at collection ' . $collection . ' for window '
+                . $windowLabel . ': ' . $e . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+        }
+
+        if (!$harvestComplete) {
+            if ($recordCount > 0) {
+                echo 'ERROR: Discarding ' . $recordCount . ' partially harvested OAI-PMH records for '
+                    . $collection . ' in window ' . $windowLabel . '.' . PHP_EOL;
+            }
+            return null;
+        }
+
+        $this->verboseLog('Finished OAI-PMH window for ' . $collection . ' (' . $recordCount
+            . ' records, ' . $windowLabel . ').');
+
+        return [
+            'record_count' => $recordCount,
+            'records' => $harvestedRecords,
+        ];
+    }
+
+    private function retryHarvestAsSmallerWindows(
+        Endpoint $oaiPmhEndpoint,
+        string $collection,
+        DateTime $from,
+        DateTime $until,
+        array $oaiPmhApi,
+        string $archiveMd5Xpath,
+        string $oaiGranularity,
+        int $partialRecordCount,
+        ?RecordIteratorInterface $records
+    ): ?array {
+        if ($oaiGranularity !== Granularity::DATE_AND_TIME || $from >= $until) {
+            echo 'ERROR: OAI-PMH could not complete window ' . $from->format('Y-m-d\TH:i:s\Z')
+                . ' until ' . $until->format('Y-m-d\TH:i:s\Z') . ' for ' . $collection
+                . ' and the window cannot be split any further.' . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            return null;
+        }
+
+        // getTotalRecordCount() lazily starts the first request when no record was retrieved.
+        // After an initial 404 that would repeat the same failing request outside our catch block.
+        $expectedRecordCount = $partialRecordCount === 0 || $records === null
+            ? null
+            : $records->getTotalRecordCount();
+        $progressLabel = $expectedRecordCount === null
+            ? $partialRecordCount . ' records (advertised total unknown)'
+            : $partialRecordCount . ' of ' . (int) $expectedRecordCount . ' advertised records';
+        $middleTimestamp = intdiv($from->getTimestamp() + $until->getTimestamp(), 2);
+        $utc = new DateTimeZone('UTC');
+        $leftUntil = (new DateTime('@' . $middleTimestamp))->setTimezone($utc);
+        $rightFrom = (new DateTime('@' . ($middleTimestamp + 1)))->setTimezone($utc);
+
+        $this->verboseLog('OAI-PMH stopped after ' . $progressLabel . ' for ' . $collection
+            . '; retrying the window as two smaller windows.');
+
+        $leftResult = $this->harvestOaiPmhWindow(
+            $oaiPmhEndpoint,
+            $collection,
+            $from,
+            $leftUntil,
+            $oaiPmhApi,
+            $archiveMd5Xpath,
+            $oaiGranularity
+        );
+        if ($leftResult === null) {
+            return null;
+        }
+
+        $rightResult = $this->harvestOaiPmhWindow(
+            $oaiPmhEndpoint,
+            $collection,
+            $rightFrom,
+            $until,
+            $oaiPmhApi,
+            $archiveMd5Xpath,
+            $oaiGranularity
+        );
+        if ($rightResult === null) {
+            return null;
+        }
+
+        return [
+            'record_count' => $leftResult['record_count'] + $rightResult['record_count'],
+            'records' => array_merge($leftResult['records'], $rightResult['records']),
+        ];
     }
 
     private function validateCompletedHarvest(
@@ -395,25 +580,6 @@ class ProcessOffloadedResourcesCommand extends Command
         }
 
         return true;
-    }
-
-    private function canConfirmHarvestCompleteAfterNoRecords(?RecordIteratorInterface $records, int $recordCount): bool
-    {
-        if ($recordCount === 0) {
-            return true;
-        }
-        if ($records === null) {
-            return false;
-        }
-
-        $expectedRecordCount = $records->getTotalRecordCount();
-        if ($expectedRecordCount !== null && (int) $expectedRecordCount === $recordCount) {
-            return true;
-        }
-
-        $this->processError = true;
-        $this->coverageError = true;
-        return false;
     }
 
     private function verboseLog($message): void
