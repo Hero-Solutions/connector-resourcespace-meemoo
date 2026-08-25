@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Entity\FileChecksum;
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
 use App\Util\OaiPmhApiUtil;
@@ -15,6 +16,7 @@ use Phpoaipmh\Endpoint;
 use Phpoaipmh\Exception\HttpException;
 use Phpoaipmh\Exception\OaipmhException;
 use Phpoaipmh\HttpAdapter\CurlAdapter;
+use Phpoaipmh\RecordIteratorInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -45,6 +47,10 @@ class ProcessOffloadedResourcesCommand extends Command
     private array $resourcesProcessed;
     private array $resourcesSeen;
     private array $resourceArchiveStatuses;
+    private array $observedArchiveStatuses;
+    private array $md5VerifiedResourceIds;
+    private array $resourceChecksumMismatches;
+    private ?array $knownOffloadChecksumsByResource = null;
     private int $pendingProcessingGraceSeconds;
 
     public function __construct(ParameterBagInterface $params, EntityManagerInterface $entityManager, $dryRun = false)
@@ -135,6 +141,10 @@ class ProcessOffloadedResourcesCommand extends Command
         $this->resourcesProcessed = array();
         $this->resourcesSeen = array();
         $this->resourceArchiveStatuses = array();
+        $this->observedArchiveStatuses = array();
+        $this->md5VerifiedResourceIds = array();
+        $this->resourceChecksumMismatches = array();
+        $this->knownOffloadChecksumsByResource = null;
         $pendingProcessingGraceHours = $this->params->has('pending_processing_grace_hours')
             ? $this->params->get('pending_processing_grace_hours')
             : 48;
@@ -162,6 +172,7 @@ class ProcessOffloadedResourcesCommand extends Command
                 . $this->resourceIdFilter . ' from ' . $this->fromFilter->format(DATE_ATOM)
                 . ' until ' . $this->untilFilter->format(DATE_ATOM) . '.');
             $this->processOaiPmhApi([$collection], $this->fromFilter, $this->untilFilter);
+            $this->reportTargetedResourceStatus($this->resourceIdFilter);
             if (!in_array((string) $this->resourceIdFilter, $this->resourcesProcessed, true)) {
                 echo 'ERROR: No completed meemoo record for ResourceSpace resource ' . $this->resourceIdFilter
                     . ' was found in the selected OAI-PMH window.' . PHP_EOL;
@@ -238,6 +249,9 @@ class ProcessOffloadedResourcesCommand extends Command
 
         foreach($collections as $collection) {
             $recordCount = 0;
+            $records = null;
+            $harvestedRecords = [];
+            $harvestComplete = false;
 
             try {
                 $this->verboseLog('Starting OAI-PMH collection ' . $collection . '.');
@@ -251,53 +265,155 @@ class ProcessOffloadedResourcesCommand extends Command
                 foreach($records as $record) {
                     $recordCount++;
                     if($recordCount === 1 || $recordCount % 100 === 0) {
-                        $this->verboseLog('Processing OAI-PMH record ' . $recordCount . ' for ' . $collection . '.');
+                        $this->verboseLog('Harvesting OAI-PMH record ' . $recordCount . ' for ' . $collection . '.');
                     }
 
-                    $this->processRecord($collection, $record->header->identifier, $record->metadata->children($oaiPmhApi['namespace'], true),
-                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'], $oaiPmhApi['media_id_xpath'], $oaiPmhApi['archive_status_xpath'],
-                        $archiveMd5Xpath,
-                        $oaiPmhApi['completed_status']);
+                    if (!isset($record->metadata)) {
+                        // Deleted OAI-PMH records legitimately have a header without metadata and
+                        // cannot be linked to ResourceSpace.
+                        if (isset($record->header['status']) && (string) $record->header['status'] === 'deleted') {
+                            continue;
+                        }
+                        throw new \UnexpectedValueException(
+                            'OAI-PMH record ' . $recordCount . ' for ' . $collection . ' has no metadata.'
+                        );
+                    }
+                    if (!isset($record->header->identifier) || trim((string) $record->header->identifier) === '') {
+                        throw new \UnexpectedValueException(
+                            'OAI-PMH record ' . $recordCount . ' for ' . $collection . ' has no identifier.'
+                        );
+                    }
 
-                    // A targeted repair needs only the first completed record containing the
-                    // exact ResourceSpace ID. Stop before traversing the rest of the date window.
-                    if ($this->resourceIdFilter !== null
-                        && in_array((string) $this->resourceIdFilter, $this->resourcesProcessed, true)) {
-                        break;
+                    $metadata = $record->metadata->children($oaiPmhApi['namespace'], true);
+                    foreach ($this->extractHarvestedRecords(
+                        $collection,
+                        (string) $record->header->identifier,
+                        $metadata,
+                        $oaiPmhApi['resource_data_xpath'] . '/' . $oaiPmhApi['resourcespace_id'],
+                        $oaiPmhApi['media_id_xpath'],
+                        $oaiPmhApi['archive_status_xpath'],
+                        $archiveMd5Xpath
+                    ) as $harvestedRecord) {
+                        $harvestedRecords[] = $harvestedRecord;
                     }
                 }
 
-                $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (' . $recordCount . ' records).');
+                $harvestComplete = $this->validateCompletedHarvest($collection, $records, $recordCount);
             }
             catch(OaipmhException $e) {
-                if($e->getOaiErrorCode() == 'noRecordsMatch') {
-                    echo 'No records to process for ' . $collection . '.' . PHP_EOL;
-                    $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (0 records).');
+                if($e->getOaiErrorCode() == 'noRecordsMatch'
+                    && $this->canConfirmHarvestCompleteAfterNoRecords($records, $recordCount)) {
+                    $harvestComplete = true;
+                    if ($recordCount === 0) {
+                        echo 'No records to process for ' . $collection . '.' . PHP_EOL;
+                    } else {
+                        echo 'WARNING: OAI-PMH returned noRecordsMatch after all ' . $recordCount
+                            . ' advertised records for ' . $collection . ' had already been harvested.' . PHP_EOL;
+                    }
                 } else {
                     echo 'OAI-PMH error (1) at collection ' . $collection . ': ' . $e . PHP_EOL;
                     $this->processError = true;
                     $this->coverageError = true;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
                 }
             }
             catch(HttpException $e) {
-                if($this->isNoRecordsHttpException($e)) {
-                    echo 'No records to process for ' . $collection . '.' . PHP_EOL;
-                    $this->verboseLog('Finished OAI-PMH collection ' . $collection . ' (0 records).');
+                if($this->isNoRecordsHttpException($e)
+                    && $this->canConfirmHarvestCompleteAfterNoRecords($records, $recordCount)) {
+                    $harvestComplete = true;
+                    if ($recordCount === 0) {
+                        echo 'No records to process for ' . $collection . '.' . PHP_EOL;
+                    } else {
+                        echo 'WARNING: OAI-PMH returned an empty 404 after all ' . $recordCount
+                            . ' advertised records for ' . $collection . ' had already been harvested.' . PHP_EOL;
+                    }
                 } else {
                     echo 'OAI-PMH error (2) at collection ' . $collection . ': ' . $e . PHP_EOL;
                     $this->processError = true;
                     $this->coverageError = true;
                 }
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
             }
-            catch(Exception $e) {
+            catch(\Throwable $e) {
                 echo 'OAI-PMH error (3) at collection ' . $collection . ': ' . $e . PHP_EOL;
                 $this->processError = true;
                 $this->coverageError = true;
-//                $this->logger->error('OAI-PMH error at collection ' . $collection . ': ' . $e);
+            }
+
+            if (!$harvestComplete) {
+                if ($recordCount > 0) {
+                    echo 'ERROR: Discarding ' . $recordCount . ' partially harvested OAI-PMH records for '
+                        . $collection . '; no ResourceSpace resources were changed from this incomplete harvest.' . PHP_EOL;
+                }
+                continue;
+            }
+
+            $this->verboseLog('Finished OAI-PMH harvest for ' . $collection . ' (' . $recordCount . ' records).');
+            if (!$this->loadKnownOffloadChecksums()) {
+                return;
+            }
+
+            foreach ($harvestedRecords as $harvestedRecord) {
+                $this->processHarvestedRecord($harvestedRecord, $oaiPmhApi['completed_status']);
+
+                // A targeted repair needs only the first completed, ID+MD5-verified record.
+                if ($this->resourceIdFilter !== null
+                    && in_array((string) $this->resourceIdFilter, $this->resourcesProcessed, true)) {
+                    break;
+                }
             }
         }
+    }
+
+    private function validateCompletedHarvest(
+        string $collection,
+        RecordIteratorInterface $records,
+        int $recordCount
+    ): bool {
+        $expectedRecordCount = $records->getTotalRecordCount();
+        if ($expectedRecordCount !== null && (int) $expectedRecordCount !== $recordCount) {
+            echo 'ERROR: Incomplete OAI-PMH harvest for ' . $collection . ': received ' . $recordCount
+                . ' of ' . (int) $expectedRecordCount . ' advertised records.' . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            return false;
+        }
+
+        $resumptionToken = trim((string) ($records->getResumptionToken() ?? ''));
+        if ($resumptionToken !== '') {
+            echo 'ERROR: Incomplete OAI-PMH harvest for ' . $collection
+                . ': a resumption token remained after iteration stopped.' . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            return false;
+        }
+
+        if ((int) $records->getNumRetrieved() !== $recordCount) {
+            echo 'ERROR: Incomplete OAI-PMH harvest for ' . $collection . ': iterator count '
+                . (int) $records->getNumRetrieved() . ' differs from processed count ' . $recordCount . '.' . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            return false;
+        }
+
+        return true;
+    }
+
+    private function canConfirmHarvestCompleteAfterNoRecords(?RecordIteratorInterface $records, int $recordCount): bool
+    {
+        if ($recordCount === 0) {
+            return true;
+        }
+        if ($records === null) {
+            return false;
+        }
+
+        $expectedRecordCount = $records->getTotalRecordCount();
+        if ($expectedRecordCount !== null && (int) $expectedRecordCount === $recordCount) {
+            return true;
+        }
+
+        $this->processError = true;
+        $this->coverageError = true;
+        return false;
     }
 
     private function verboseLog($message): void
@@ -315,25 +431,118 @@ class ProcessOffloadedResourcesCommand extends Command
         return (int) $e->getCode() === 404 && trim($e->getBody()) === '';
     }
 
-    private function processRecord($collection, $assetId, $record,
-                                   $resourceIdXpath, $mediaIdXpath, $archiveStatusXpath, $archiveMd5Xpath, $completedStatuses): void
-    {
-        $resourceIds = $record->xpath($resourceIdXpath);
-        foreach($resourceIds as $id) {
-            $resourceId = strval($id);
+    private function extractHarvestedRecords(
+        string $collection,
+        string $assetId,
+        $record,
+        string $resourceIdXpath,
+        string $mediaIdXpath,
+        string $archiveStatusXpath,
+        string $archiveMd5Xpath
+    ): array {
+        $archiveStatus = null;
+        $archiveStatuses = $record->xpath($archiveStatusXpath);
+        if (is_array($archiveStatuses)) {
+            foreach ($archiveStatuses as $status) {
+                $archiveStatus = trim((string) $status);
+            }
+        }
 
+        $mediaId = null;
+        $mediaIds = $record->xpath($mediaIdXpath);
+        if (is_array($mediaIds)) {
+            foreach ($mediaIds as $candidateMediaId) {
+                $mediaId = trim((string) $candidateMediaId);
+            }
+        }
+
+        $archivedMd5 = $this->extractSingleMd5($record, $archiveMd5Xpath);
+        $resourceIds = $record->xpath($resourceIdXpath);
+        if (!is_array($resourceIds)) {
+            return [];
+        }
+
+        $harvestedRecords = [];
+        foreach ($resourceIds as $id) {
+            $resourceId = trim((string) $id);
+            if (preg_match('/^[0-9]+$/', $resourceId) !== 1) {
+                continue;
+            }
             if ($this->resourceIdFilter !== null && (int) $resourceId !== $this->resourceIdFilter) {
                 continue;
             }
 
-            //Only process ResourceSpace ID's (maybe we should work out a more robust mechanism to detect which resources were offloaded through ResourceSpace)
-            if(preg_match('/^[0-9]+$/', $resourceId)) {
+            $harvestedRecords[] = [
+                'collection' => $collection,
+                'asset_id' => $assetId,
+                'resource_id' => $resourceId,
+                'media_id' => $mediaId,
+                'archive_status' => $archiveStatus,
+                'archive_md5' => $archivedMd5,
+            ];
+        }
 
-                $archiveStatus = null;
-                $archiveStatuses = $record->xpath($archiveStatusXpath);
-                foreach($archiveStatuses as $status) {
-                    $archiveStatus = trim((string) $status);
+        return $harvestedRecords;
+    }
+
+    private function loadKnownOffloadChecksums(): bool
+    {
+        if ($this->knownOffloadChecksumsByResource !== null) {
+            return true;
+        }
+
+        try {
+            $this->knownOffloadChecksumsByResource = [];
+            $storedChecksums = $this->entityManager->getRepository(FileChecksum::class)->findAll();
+            foreach ($storedChecksums as $storedChecksum) {
+                $resourceId = (string) $storedChecksum->getResourceId();
+                $checksum = strtolower(trim($storedChecksum->getFileChecksum()));
+                if (preg_match('/^[0-9a-f]{32}$/', $checksum) === 1) {
+                    $this->knownOffloadChecksumsByResource[$resourceId][$checksum] = true;
                 }
+            }
+        } catch (\Throwable $e) {
+            echo 'ERROR: Could not load the checksums of files uploaded by this connector: '
+                . $e->getMessage() . PHP_EOL;
+            $this->processError = true;
+            $this->coverageError = true;
+            $this->knownOffloadChecksumsByResource = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    private function processHarvestedRecord(array $harvestedRecord, array $completedStatuses): void
+    {
+        $collection = $harvestedRecord['collection'];
+        $assetId = $harvestedRecord['asset_id'];
+        $resourceId = $harvestedRecord['resource_id'];
+        $mediaId = $harvestedRecord['media_id'];
+        $archiveStatus = $harvestedRecord['archive_status'];
+        $archivedMd5 = $harvestedRecord['archive_md5'];
+
+        $statusLabel = $archiveStatus === null || $archiveStatus === '' ? 'unknown' : $archiveStatus;
+        $this->observedArchiveStatuses[$resourceId][$statusLabel] = true;
+
+        $knownChecksums = $this->knownOffloadChecksumsByResource[$resourceId] ?? [];
+        if ($archivedMd5 === null || !isset($knownChecksums[$archivedMd5])) {
+            // A numeric external identifier may coincidentally equal a ResourceSpace ID. Only
+            // report it as a connector mismatch when this resource is known to our checksum DB,
+            // or when it was explicitly requested by a targeted command.
+            if ($knownChecksums !== [] || $this->resourceIdFilter !== null) {
+                $message = $archivedMd5 === null
+                    ? 'The OAI-PMH record contains ResourceSpace ID ' . $resourceId
+                        . ' but does not contain one valid preservation MD5 checksum.'
+                    : 'The OAI-PMH record contains ResourceSpace ID ' . $resourceId
+                        . ' but preservation MD5 ' . $archivedMd5
+                        . ' does not match a checksum uploaded for that resource by this connector.';
+                $this->resourceChecksumMismatches[$resourceId] = $message;
+                echo 'WARNING: ' . $message . ' The record was not linked to ResourceSpace.' . PHP_EOL;
+            }
+            return;
+        }
+        $this->md5VerifiedResourceIds[$resourceId] = true;
 
                 if (!in_array($resourceId, $this->resourcesSeen, true)) {
                     $this->resourcesSeen[] = $resourceId;
@@ -352,11 +561,9 @@ class ProcessOffloadedResourcesCommand extends Command
                         $this->resourcesProcessed[] = $resourceId;
                     }
 
-                    $imageUrl = null;
-                    $mediaIds = $record->xpath($mediaIdXpath);
-                    foreach ($mediaIds as $mediaId) {
-                        $imageUrl = $this->connectorUrl . 'download/' . $collection . '/' . $mediaId;
-                    }
+                    $imageUrl = empty($mediaId)
+                        ? null
+                        : $this->connectorUrl . 'download/' . $collection . '/' . $mediaId;
                     $assetUrl = $this->connectorUrl . 'data/' . $collection . '/' . $assetId;
 
                     $resourceReadFailed = false;
@@ -405,7 +612,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                     'Could not write the meemoo asset URL to ResourceSpace.',
                                     $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? ''
                                 );
-                                continue;
+                                return;
                             }
 
                             $existingOriginalUrl = $resourceMetadata[$this->resourceSpaceMetadataFields['meemoo_image_url']] ?? '';
@@ -424,7 +631,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                     'Could not write the meemoo original download URL to ResourceSpace.',
                                     $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? ''
                                 );
-                                continue;
+                                return;
                             }
 
                             if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload']
@@ -438,8 +645,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                             $replacementSafetyError = $this->getReplacementSafetyError(
                                                 $resourceId,
                                                 $originalFilename,
-                                                $record,
-                                                $archiveMd5Xpath
+                                                $archivedMd5
                                             );
                                             if ($replacementSafetyError !== null) {
                                                 $this->failResourceProcessing(
@@ -447,7 +653,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                                     $replacementSafetyError,
                                                     $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? ''
                                                 );
-                                                continue;
+                                                return;
                                             }
                                         }
 
@@ -461,7 +667,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                                 'Error replacing original: ' . $replaceMessage,
                                                 $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? ''
                                             );
-                                            continue;
+                                            return;
                                         }
                                         echo 'Replaced resource ' . $resourceId . ' original file: ' . $replaceMessage . PHP_EOL;
                                     }
@@ -469,7 +675,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                         $resourceId,
                                         $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? ''
                                     )) {
-                                        continue;
+                                        return;
                                     }
                                     if (!$this->resourceSpace->updateFieldVerified($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded'])) {
                                         $this->failResourceProcessing(
@@ -477,7 +683,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                             'All meemoo data was processed, but the final Offloaded status could not be written to ResourceSpace.',
                                             ''
                                         );
-                                        continue;
+                                        return;
                                     }
                                 }
                             } else if ($resourceMetadata[$statusKey] == $this->offloadStatusField['values']['offload_but_keep_original']
@@ -489,7 +695,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                         $resourceId,
                                         $resourceMetadata[$this->resourceSpaceMetadataFields['offload_error']] ?? ''
                                     )) {
-                                        continue;
+                                        return;
                                     }
                                     if (!$this->resourceSpace->updateFieldVerified($resourceId, $statusKey, $this->offloadStatusField['values']['offloaded_but_keep_original'])) {
                                         $this->failResourceProcessing(
@@ -497,7 +703,7 @@ class ProcessOffloadedResourcesCommand extends Command
                                             'All meemoo data was processed, but the final Offloaded status could not be written to ResourceSpace.',
                                             ''
                                         );
-                                        continue;
+                                        return;
                                     }
                                 }
                             }
@@ -524,8 +730,43 @@ class ProcessOffloadedResourcesCommand extends Command
 
                     }
                 }
-            }
+    }
+
+    private function reportTargetedResourceStatus(int $resourceId): void
+    {
+        if ($this->coverageError) {
+            echo 'RESULT: The current meemoo status of resource ' . $resourceId
+                . ' could not be determined because the OAI-PMH harvest was incomplete.' . PHP_EOL;
+            return;
         }
+
+        $resourceIdString = (string) $resourceId;
+        $statuses = array_keys($this->observedArchiveStatuses[$resourceIdString] ?? []);
+        $statusText = $statuses === [] ? 'none' : implode(', ', $statuses);
+
+        if (in_array($resourceIdString, $this->resourcesProcessed, true)) {
+            echo 'RESULT: Resource ' . $resourceId
+                . ' has an ID+MD5-verified completed meemoo record (observed archive status: '
+                . $statusText . ').' . PHP_EOL;
+            return;
+        }
+
+        if (isset($this->md5VerifiedResourceIds[$resourceIdString])) {
+            echo 'RESULT: Resource ' . $resourceId
+                . ' was found with a matching MD5, but has no completed meemoo record '
+                . '(observed archive status: ' . $statusText . ').' . PHP_EOL;
+            return;
+        }
+
+        if ($statuses !== []) {
+            echo 'RESULT: OAI-PMH record(s) containing ResourceSpace ID ' . $resourceId
+                . ' were found, but none matched the stored upload MD5 '
+                . '(observed archive status: ' . $statusText . ').' . PHP_EOL;
+            return;
+        }
+
+        echo 'RESULT: No OAI-PMH record containing ResourceSpace ID ' . $resourceId
+            . ' was found in the selected window.' . PHP_EOL;
     }
 
     private function failResourceProcessing($resourceId, string $message, $currentError = ''): void
@@ -548,7 +789,7 @@ class ProcessOffloadedResourcesCommand extends Command
         }
     }
 
-    private function getReplacementSafetyError($resourceId, $originalFilename, $record, string $archiveMd5Xpath): ?string
+    private function getReplacementSafetyError($resourceId, $originalFilename, string $archivedMd5): ?string
     {
         if (!is_string($originalFilename) || trim($originalFilename) === '') {
             return 'Cannot safely replace the original because its filename is missing.';
@@ -557,11 +798,6 @@ class ProcessOffloadedResourcesCommand extends Command
         $extension = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
         if ($extension === '') {
             return 'Cannot safely replace the original because its file extension is missing.';
-        }
-
-        $archivedMd5 = $this->extractSingleMd5($record, $archiveMd5Xpath);
-        if ($archivedMd5 === null) {
-            return 'Cannot safely replace the original because the completed meemoo record does not contain one valid MD5 checksum.';
         }
 
         $currentMd5 = $this->resourceSpace->getOriginalFileMd5($resourceId, $extension);
@@ -688,8 +924,13 @@ class ProcessOffloadedResourcesCommand extends Command
 
                         $resourceIdString = (string) $resourceId;
                         $archiveStatus = $this->resourceArchiveStatuses[$resourceIdString] ?? null;
+                        $checksumMismatch = $this->resourceChecksumMismatches[$resourceIdString] ?? null;
                         if ($pendingAgeSeconds < $this->pendingProcessingGraceSeconds) {
-                            if (in_array($resourceIdString, $this->resourcesSeen, true)) {
+                            if ($checksumMismatch !== null) {
+                                echo 'Resource ' . $resourceId
+                                    . ' remains pending because an OAI-PMH record with the same ID did not pass MD5 verification.'
+                                    . PHP_EOL;
+                            } else if (in_array($resourceIdString, $this->resourcesSeen, true)) {
                                 echo 'Resource ' . $resourceId . ' remains pending while meemoo processes it (archive status: '
                                     . ($archiveStatus === null || $archiveStatus === '' ? 'unknown' : $archiveStatus)
                                     . ').' . PHP_EOL;
@@ -701,7 +942,9 @@ class ProcessOffloadedResourcesCommand extends Command
                         }
 
                         $graceHours = (int) ($this->pendingProcessingGraceSeconds / 3600);
-                        if (in_array($resourceIdString, $this->resourcesSeen, true)) {
+                        if ($checksumMismatch !== null) {
+                            $message = $checksumMismatch;
+                        } else if (in_array($resourceIdString, $this->resourcesSeen, true)) {
                             $message = 'Meemoo processing did not complete within ' . $graceHours
                                 . ' hours (last archive status: '
                                 . ($archiveStatus === null || $archiveStatus === '' ? 'unknown' : $archiveStatus)

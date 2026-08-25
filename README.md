@@ -109,10 +109,30 @@ To check if the last offload was successful and delete the appropriate original 
 php bin/console app:process-offloaded-resources
 ```
 
+The processor first harvests and verifies the complete OAI-PMH result set without
+changing ResourceSpace. It starts processing only after pagination is demonstrably
+complete. An OAI-PMH record is linked to ResourceSpace only when both its numeric
+ResourceSpace ID and preservation MD5 match a checksum stored by this connector for
+that resource during upload.
+
+For a manual run with live, timed progress information, use:
+
+```bash
+bash /opt/connector-resourcespace-meemoo/offload.sh --progress
+```
+
+Without `--progress`, `offload.sh` keeps its normal concise cron logging. Progress mode
+shows every ResourceSpace search and every selected resource, including time spent on
+full metadata retrieval, validation, downloads, uploads and metadata synchronization.
+
 To find one older offload in a bounded OAI-PMH window without changing ResourceSpace or any timestamps:
 ```
 php bin/console app:test-process-offloaded-resources --resource-id=134632 --from=2026-04-09 --until=2026-04-13 -vvv
 ```
+
+The targeted result summary reports all archive statuses observed for that ResourceSpace
+ID and distinguishes a completed ID+MD5 match, a verified record that is still pending,
+an ID with a mismatching MD5, an absent record, and an incomplete harvest.
 
 If the dry run finds the completed meemoo record and reports the expected asset and original URLs, the same targeted command without `test-` repairs only that resource. It never advances `last_processed_timestamp`:
 ```

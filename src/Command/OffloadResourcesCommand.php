@@ -35,6 +35,7 @@ class OffloadResourcesCommand extends Command
     private bool $dryRun;
     private bool $forceUpdateMetadata;
     private bool $verbose;
+    private bool $showProgress = false;
     private ?int $resourceIdFilter;
     private bool $resourceIdFilterMatched = false;
 
@@ -111,6 +112,12 @@ class OffloadResourcesCommand extends Command
                 null,
                 InputOption::VALUE_REQUIRED,
                 'Only offload the ResourceSpace resource with this numeric ID; never advances the global offload timestamp.'
+            )
+            ->addOption(
+                'progress',
+                null,
+                InputOption::VALUE_NONE,
+                'Show timed progress for searches and selected resources.'
             );
     }
 
@@ -132,6 +139,7 @@ class OffloadResourcesCommand extends Command
         }
 
         $this->verbose = $input->getOption('verbose');
+        $this->showProgress = (bool) $input->getOption('progress');
         return $this->offloadImages();
     }
 
@@ -330,6 +338,8 @@ class OffloadResourcesCommand extends Command
         $resourcesWithOffloadErrors = array();
 
         if ($useFastSelection) {
+            $errorSearchStartedAt = microtime(true);
+            $this->progressLog('Searching ResourceSpace for resources with a non-empty offload error.');
             $resourcesWithOffloadErrors = $this->getResourcesWithOffloadErrors();
             if ($resourcesWithOffloadErrors === null) {
                 echo 'ERROR: Could not retrieve ResourceSpace resources with data in offload error field '
@@ -337,6 +347,10 @@ class OffloadResourcesCommand extends Command
                 $this->searchError = true;
                 return;
             }
+            $this->progressLog(
+                'Finished offload-error search: ' . count($resourcesWithOffloadErrors) . ' resources found.',
+                $errorSearchStartedAt
+            );
             if ($this->verbose) {
                 echo 'INFO: Found ' . count($resourcesWithOffloadErrors)
                     . ' resources with a non-empty offload error.' . PHP_EOL;
@@ -352,6 +366,8 @@ class OffloadResourcesCommand extends Command
                 if ($this->resourceIdFilter !== null && $this->resourceIdFilterMatched) {
                     break;
                 }
+                $searchStartedAt = microtime(true);
+                $this->progressLog('Searching collection ' . $collection . ' for status "' . $filter . '".');
                 $allResources = $this->resourceSpace->getAllResources(urlencode('"' . $this->collectionKey . ':' . $collection . '" "' . $this->offloadStatusField['key'] . ':' . $filter . '"'));
                 if (!is_array($allResources)) {
                     // Never advance the timestamp after a failed search: the resources we did not see
@@ -360,6 +376,10 @@ class OffloadResourcesCommand extends Command
                     $this->searchError = true;
                     continue;
                 }
+                $this->progressLog(
+                    'Finished search for ' . $collection . ' / "' . $filter . '": ' . count($allResources) . ' candidates.',
+                    $searchStartedAt
+                );
                 // Loop through all resources in this collection
                 foreach ($allResources as $resourceInfo) {
                     if ($this->resourceIdFilter !== null && $this->resourceIdFilterMatched) {
@@ -382,6 +402,11 @@ class OffloadResourcesCommand extends Command
                     $alreadyProcessed[$resourceId] = true;
 
                     // Get this resource's metadata, but only if it has an appropriate offloadStatus
+                    $metadataReadStartedAt = microtime(true);
+                    $this->progressLog(
+                        'Resource ' . $resourceId . ' selected from ' . $collection . ' / "' . $filter
+                        . '"; fetching full ResourceSpace metadata.'
+                    );
                     $metadataReadFailed = false;
                     $resourceMetadata = $this->resourceSpace->getResourceMetadataIfFieldContains(
                         $resourceId,
@@ -394,6 +419,7 @@ class OffloadResourcesCommand extends Command
                         $this->resourceError = true;
                         continue;
                     }
+                    $this->progressLog('Fetched full metadata for resource ' . $resourceId . '.', $metadataReadStartedAt);
                     if ($resourceMetadata != null) {
                         if (array_key_exists($this->offloadStatusField['key'], $resourceMetadata)) {
                             if ($resourceMetadata[$this->offloadStatusField['key']] == $this->offloadStatusField['values']['offloaded_now_delete_original']) {
@@ -544,7 +570,10 @@ class OffloadResourcesCommand extends Command
                         }
 
                         if(!$failed) {
+                            $resourceProcessingStartedAt = microtime(true);
+                            $this->progressLog('Processing selected resource ' . $resourceId . '.');
                             $this->processResource($resourceId, $resourceInfo, $resourceMetadata, $collection, $extension, $offloadFile, $fileModifiedTimestampAsString);
+                            $this->progressLog('Finished selected resource ' . $resourceId . '.', $resourceProcessingStartedAt);
                         } else if($offloadFile) {
                             // Only set status to 'failed' if we actually wanted to offload the file, NOT when we're only updating metadata
                             if(!$this->dryRun) {
@@ -686,9 +715,13 @@ class OffloadResourcesCommand extends Command
         $metadataModifiedDate = $resourceInfo['modified'] ?? '';
         $creationDate = $resourceInfo['creation_date'] ?? '';
         $offloadFileBeforeDuplicateCheck = $offloadFile;
+        $metadataDecisionStartedAt = microtime(true);
+        $this->progressLog('Resource ' . $resourceId . ': determining whether metadata must be updated.');
         $offloadMetadata = $this->shouldOffloadMetadata($resourceId, $resourceInfo, $resourceMetadata, $offloadFile);
+        $this->progressLog('Resource ' . $resourceId . ': metadata decision completed.', $metadataDecisionStartedAt);
 
         if (!$offloadMetadata) {
+            $this->progressLog('Resource ' . $resourceId . ': no relevant change; nothing to offload.');
             return;
         }
 
@@ -700,6 +733,8 @@ class OffloadResourcesCommand extends Command
         }
 
         // Validate metadata before downloading the image. The final XML is regenerated with the real MD5 after download.
+        $validationStartedAt = microtime(true);
+        $this->progressLog('Resource ' . $resourceId . ': generating and validating metadata.');
         $domDoc = $this->generateAndValidateXMLFile(
             $resourceId,
             $resourceMetadata,
@@ -711,6 +746,7 @@ class OffloadResourcesCommand extends Command
             $offloadFile,
             false
         );
+        $this->progressLog('Resource ' . $resourceId . ': initial metadata validation completed.', $validationStartedAt);
         if ($domDoc == null) {
             if ($offloadFile) {
                 $this->markResourceOffloadFailed($resourceId, $resourceMetadata);
@@ -720,6 +756,8 @@ class OffloadResourcesCommand extends Command
 
         if($offloadFile) {
             $localFilename = $this->outputFolder . '/' . $uniqueFilename;
+            $downloadStartedAt = microtime(true);
+            $this->progressLog('Resource ' . $resourceId . ': requesting and downloading the ResourceSpace original for offload.');
             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
             if (!is_string($resourceUrl) || $resourceUrl === '' || !$this->resourceSpace->downloadFileVerified($resourceUrl, $localFilename)) {
                 $this->failResourceOffload($resourceId, $resourceMetadata, 'Could not download resource file for offload.');
@@ -766,12 +804,15 @@ class OffloadResourcesCommand extends Command
                     }
                 }
             }
+            $this->progressLog('Resource ' . $resourceId . ': original download step completed.', $downloadStartedAt);
         } else if (!$md5IsKnown) {
             // Metadata-only update of a resource without a stored checksum: download the file to
             // backfill md5checksum in ResourceSpace. If that fails, the XML keeps the placeholder
             // (md5 is mandatory in the XSD but filtered out of the meemoo update), so we flag it in
             // the error field: a non-empty error field makes the next run retry this resource.
             $localFilename = $this->outputFolder . '/' . $uniqueFilename;
+            $downloadStartedAt = microtime(true);
+            $this->progressLog('Resource ' . $resourceId . ': requesting and downloading the file only to calculate its missing MD5 checksum.');
             $resourceUrl = $this->resourceSpace->getResourceUrl($resourceId, $extension);
             if (!is_string($resourceUrl) || $resourceUrl === '' || !$this->resourceSpace->downloadFileVerified($resourceUrl, $localFilename)) {
                 $this->warnMissingMd5($resourceId, $resourceMetadata, 'Could not download the file to calculate its missing MD5 checksum.');
@@ -786,6 +827,7 @@ class OffloadResourcesCommand extends Command
                     }
                 }
             }
+            $this->progressLog('Resource ' . $resourceId . ': MD5 download step completed.', $downloadStartedAt);
         }
 
         if ($offloadFile !== $offloadFileBeforeDuplicateCheck) {
@@ -793,6 +835,8 @@ class OffloadResourcesCommand extends Command
         }
 
         if ($offloadMetadata) {
+            $finalMetadataStartedAt = microtime(true);
+            $this->progressLog('Resource ' . $resourceId . ': generating final metadata.');
             $domDoc = $this->generateAndValidateXMLFile(
                 $resourceId,
                 $resourceMetadata,
@@ -803,8 +847,15 @@ class OffloadResourcesCommand extends Command
                 $creationDate,
                 $offloadFile
             );
+            $this->progressLog('Resource ' . $resourceId . ': final metadata generated.', $finalMetadataStartedAt);
             if ($domDoc != null) {
+                $offloadStartedAt = microtime(true);
+                $this->progressLog(
+                    'Resource ' . $resourceId . ': starting '
+                    . ($offloadFile ? 'file and metadata upload.' : 'metadata-only synchronization.')
+                );
                 $offloaded = $this->offloadResource($resourceId, $resourceMetadata, $md5, $domDoc, $xmlFile, $offloadFile, $localFilename, $uniqueFilename, $uniqueFilenameWithoutExtension, $collection);
+                $this->progressLog('Resource ' . $resourceId . ': upload/synchronization step completed.', $offloadStartedAt);
 
                 if ($this->verbose) {
                     if ($offloaded && $offloadFile) {
@@ -822,6 +873,18 @@ class OffloadResourcesCommand extends Command
         if($localFilename !== null && file_exists($localFilename)) {
             unlink($localFilename);
         }
+    }
+
+    private function progressLog(string $message, ?float $startedAt = null): void
+    {
+        if (!$this->showProgress) {
+            return;
+        }
+
+        $duration = $startedAt === null
+            ? ''
+            : ' (' . number_format(microtime(true) - $startedAt, 2, '.', '') . ' s)';
+        echo date('Y-m-d H:i:s') . ' - PROGRESS: ' . $message . $duration . PHP_EOL;
     }
 
     private function shouldOffloadMetadata($resourceId, array $resourceInfo, array $resourceMetadata, bool $offloadFile): bool
