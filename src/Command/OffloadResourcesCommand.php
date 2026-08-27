@@ -2,7 +2,6 @@
 
 namespace App\Command;
 
-use App\Entity\FileChecksum;
 use App\ResourceSpace\ResourceSpace;
 use App\Util\DateTimeUtil;
 use App\Util\FtpUtil;
@@ -10,6 +9,8 @@ use App\Util\OaiPmhApiUtil;
 use App\Util\RestApi;
 use App\Util\XMLUtil;
 use App\Twig\MetadataTemplateExtension;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\ConnectionException;
 use Doctrine\ORM\EntityManagerInterface;
 use DOMDocument;
 use DOMXPath;
@@ -772,23 +773,18 @@ class OffloadResourcesCommand extends Command
                         $this->resourceSpace->updateField($resourceId, 'md5checksum', $md5);
                     }
 
-                    // Prevent files with duplicate MD5 checksums from being offloaded
-                    $existingChecksums = $this->entityManager->createQueryBuilder()
-                        ->select('i')
-                        ->from(FileChecksum::class, 'i')
-                        ->where('i.fileChecksum = :checksum')
-                        ->setParameter('checksum', $md5)
-                        ->getQuery()
-                        ->getResult();
-                    foreach ($existingChecksums as $existingChecksum) {
+                    // Prevent files with duplicate MD5 checksums from being offloaded. This uses
+                    // a short-lived connection so MySQL is never left idle during a file upload.
+                    $existingChecksumResourceId = $this->findResourceIdByChecksum($md5);
+                    if ($existingChecksumResourceId !== null) {
                         $offloadFile = false;
                         // A checksum row only proves these bytes were uploaded at some point, not that
                         // that upload is still awaiting ingest, so this always stays a hard failure.
                         // Only the message differs, to tell the two situations apart.
-                        if ((int) $existingChecksum->getResourceId() === (int) $resourceId) {
+                        if ($existingChecksumResourceId === (int) $resourceId) {
                             $duplicateMessage = 'This exact file was already offloaded for this same resource. Remove its checksum from the database to force a new offload.';
                         } else {
-                            $duplicateMessage = 'This exact file was already offloaded (see resource ' . $existingChecksum->getResourceId() . ').';
+                            $duplicateMessage = 'This exact file was already offloaded (see resource ' . $existingChecksumResourceId . ').';
                         }
                         echo 'ERROR at resource ' . $resourceId . ': ' . $duplicateMessage . PHP_EOL;
                         if (!$this->dryRun) {
@@ -1280,11 +1276,9 @@ class OffloadResourcesCommand extends Command
                     $result = false;
                 } else {
                     // Only remember the checksum after both the resource and its XML metadata were uploaded successfully.
-                    $fileChecksum = new FileChecksum();
-                    $fileChecksum->setFileChecksum($md5);
-                    $fileChecksum->setResourceId($resourceId);
-                    $this->entityManager->persist($fileChecksum);
-                    $this->entityManager->flush();
+                    // The insert is idempotent and waits for MySQL to return instead of aborting a
+                    // successful external upload with "MySQL server has gone away".
+                    $this->storeUploadedChecksum($md5, (int) $resourceId);
 
                     // Update offload status in ResourceSpace. The file is already at meemoo at this
                     // point, so a failing status update must be visible instead of silently ignored.
@@ -1411,6 +1405,78 @@ class OffloadResourcesCommand extends Command
         }
 
         return $this->ftpUtil->uploadFile($collection, $xmlFile, $remoteXmlFilename);
+    }
+
+    private function findResourceIdByChecksum(string $md5): ?int
+    {
+        $resourceId = $this->withFreshDatabaseConnection(
+            static fn (Connection $connection) => $connection->fetchOne(
+                'SELECT resource_id FROM file_checksums WHERE file_checksum = ?',
+                [$md5]
+            ),
+            'checking an uploaded file checksum'
+        );
+
+        return $resourceId === false ? null : (int) $resourceId;
+    }
+
+    private function storeUploadedChecksum(string $md5, int $resourceId): void
+    {
+        $this->withFreshDatabaseConnection(
+            static function (Connection $connection) use ($md5, $resourceId): void {
+                // Check first so a retry is safe when MySQL committed the previous INSERT but the
+                // connection disappeared before the connector received the result.
+                $storedResourceId = $connection->fetchOne(
+                    'SELECT resource_id FROM file_checksums WHERE file_checksum = ?',
+                    [$md5]
+                );
+                if ($storedResourceId !== false) {
+                    if ((int) $storedResourceId !== $resourceId) {
+                        throw new \RuntimeException(
+                            'Checksum ' . $md5 . ' is already registered for ResourceSpace resource '
+                            . $storedResourceId . ', not resource ' . $resourceId . '.'
+                        );
+                    }
+                    return;
+                }
+
+                $connection->insert('file_checksums', [
+                    'file_checksum' => $md5,
+                    'resource_id' => $resourceId,
+                ]);
+            },
+            'registering an uploaded file checksum'
+        );
+    }
+
+    private function withFreshDatabaseConnection(callable $operation, string $description): mixed
+    {
+        $connection = $this->entityManager->getConnection();
+        $attempt = 0;
+
+        while (true) {
+            $attempt++;
+            // Doctrine only checks whether it still holds a connection object; it does not ping
+            // that connection before reuse. Closing it here guarantees that the next query opens
+            // a new MySQL connection instead of reusing one that expired during a long transfer.
+            $connection->close();
+
+            try {
+                $result = $operation($connection);
+                $connection->close();
+                return $result;
+            } catch (ConnectionException $e) {
+                $connection->close();
+                $waitSeconds = min(30, 2 ** min($attempt - 1, 5));
+                echo 'WARNING: MySQL is unavailable while ' . $description . ' (attempt '
+                    . $attempt . '): ' . $e->getMessage() . ' Retrying in '
+                    . $waitSeconds . ' seconds.' . PHP_EOL;
+                sleep($waitSeconds);
+            } catch (\Throwable $e) {
+                $connection->close();
+                throw $e;
+            }
+        }
     }
 
     private function getCurrentMeemooMetadata($assetUrl, $collection): ?array
