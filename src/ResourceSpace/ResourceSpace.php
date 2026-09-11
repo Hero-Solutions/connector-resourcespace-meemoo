@@ -329,7 +329,9 @@ class ResourceSpace
                     }
                     $filename = $id . $imgType . '_' . $filename . '.jpg';
                     $filePath = $this->tmpDownloadFolderPath . $filename;
-                    $fileUrl = $this->tmpDownloadFolderUrl . $filename;
+                    // Encode the filename as a URL path segment before the complete URL is
+                    // encoded below as a ResourceSpace API query parameter.
+                    $fileUrl = rtrim($this->tmpDownloadFolderUrl, '/') . '/' . rawurlencode($filename);
                     try {
                         if (!$this->downloadFileVerified($imageUrl, $filePath)) {
                             $data['message'] = 'Alternative image could not be downloaded completely; original has not been replaced.';
